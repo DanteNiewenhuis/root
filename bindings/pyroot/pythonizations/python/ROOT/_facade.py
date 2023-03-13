@@ -363,10 +363,12 @@ class ROOTFacade(types.ModuleType):
     def TMVA(self):
         #this line is needed to import the pythonizations in _tmva directory
         from ._pythonization import _tmva
+        from ._pythonization._tmva import pythonize_tmva_namespace
         ns = self._fallback_getattr('TMVA')
         hasRDF = gSystem.GetFromPipe("root-config --has-dataframe") == "yes"
         if hasRDF:
             try:
+                pythonize_tmva_namespace(ns)
                 from libROOTPythonizations import AsRTensor
                 ns.Experimental.AsRTensor = AsRTensor
             except:

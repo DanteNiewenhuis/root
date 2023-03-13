@@ -59,6 +59,7 @@ if(tmva)
     list(APPEND PYROOT_EXTRA_PY2_PY3_SOURCE
         ROOT/_pythonization/_tmva/_crossvalidation.py
         ROOT/_pythonization/_tmva/_dataloader.py
+        ROOT/_pythonization/_tmva/_batchgenerator.py
         ROOT/_pythonization/_tmva/_factory.py
         ROOT/_pythonization/_tmva/__init__.py
         ROOT/_pythonization/_tmva/_rbdt.py
