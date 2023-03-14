@@ -14,7 +14,7 @@ class BaseGenerator:
             template (str): Template for the BatchGenerator
         """
 
-        from cppyy.gbl import RDataFrame
+        from cppyy.gbl.ROOT import RDataFrame
         x_rdf = RDataFrame(tree_name, file_name)
 
         if not columns:
@@ -109,8 +109,9 @@ class BaseGenerator:
 
         # Create C++ batch generator
 
-        from cppyy.gbl import BatchGenerator
-        self.generator = BatchGenerator(template)(
+
+        from cppyy.gbl import TMVA
+        self.generator = TMVA.Experimental.BatchGenerator(template)(
             file_name, tree_name, self.input_columns, filters, chunk_size, batch_rows, vec_sizes, validation_split, max_chunks, self.num_columns)
 
         self.deactivated = False
@@ -134,6 +135,11 @@ class BaseGenerator:
         Returns:
             np.ndarray: data sample
         """
+        try:
+            import numpy as np
+        except ImportError:
+            raise ImportError("Failed to import numpy in batchgenerator init")
+        
         if not self.target_given:
             return np.zeros((self.batch_rows, self.num_columns))
 
@@ -151,6 +157,11 @@ class BaseGenerator:
         Returns:
             np.array: converted batch
         """
+        try:
+            import numpy as np
+        except ImportError:
+            raise ImportError("Failed to import numpy in batchgenerator init")
+    
         data = batch.GetData()
         data.reshape((self.batch_size,))
         return_data = np.array(data).reshape(

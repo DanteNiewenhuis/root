@@ -85,9 +85,9 @@ public:
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Constructor
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    ChunkLoader(TMVA::Experimental::RTensor<float>& x_tensor, std::vector<size_t> vec_sizes = std::vector<size_t>(), 
-                bool add_label=false, float label=0)
-        : x_tensor(x_tensor), vec_sizes(vec_sizes), add_label(add_label), label(label)
+    ChunkLoader(TMVA::Experimental::RTensor<float>& _x_tensor, std::vector<size_t> _vec_sizes = std::vector<size_t>(), 
+                bool _add_label=false, float _label=0)
+        : x_tensor(_x_tensor), vec_sizes(_vec_sizes), add_label(_add_label), label(_label)
     {}
 
     void operator()(First first, Rest... rest) 
