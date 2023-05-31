@@ -107,8 +107,8 @@ public:
     // Getters and Setters
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // Fill the batch with rows from the chunk based on the given idx
-    void FillBatch(TMVA::Experimental::RTensor<float>* x_tensor, std::vector<size_t> idx, std::vector<TMVA::Experimental::RTensor<float>*>& batches)
+    // Create a batch filled with the events on the given idx
+    void CreateBatch(TMVA::Experimental::RTensor<float>* x_tensor, std::vector<size_t> idx, std::vector<TMVA::Experimental::RTensor<float>*>& batches)
     { 
         // Copy rows from x_tensor to the new batch
         TMVA::Experimental::RTensor<float>* batch = new TMVA::Experimental::RTensor<float>({batch_size, num_columns});
@@ -131,13 +131,15 @@ public:
         // Create tasks of batch_size untill all idx are used 
         for(size_t start = 0; (start + batch_size) <= row_order.size(); start += batch_size) {
             
-            std::vector<size_t> idx;
 
+            // Grab the first batch_size indices from the 
+            std::vector<size_t> idx;
             for (size_t i = start; i < (start + batch_size); i++) {
                 idx.push_back(row_order[i]);
             }
 
-            FillBatch(x_tensor, idx, batches);
+            // Fill a batch 
+            CreateBatch(x_tensor, idx, batches);
         }
 
         std::unique_lock<std::mutex> lock(batch_lock);
@@ -164,7 +166,7 @@ public:
                 idx.push_back(row_order[i]);
             }
 
-            FillBatch(x_tensor, idx, batches);
+            CreateBatch(x_tensor, idx, batches);
         }
 
         for (size_t i = 0; i < batches.size(); i++) {
@@ -172,6 +174,7 @@ public:
         }
     }   
 
+    // Set the validation index to 0 when starting the validation process
     void start_validation()
     {
         valid_idx = 0;

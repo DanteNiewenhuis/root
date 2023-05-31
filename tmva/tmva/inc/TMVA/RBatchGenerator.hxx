@@ -132,8 +132,8 @@ private:
 public:
 
     RBatchGenerator(std::string _file_name, std::string _tree_name, std::vector<std::string> _cols, 
-                   std::vector<std::string> _filters, size_t _chunk_size, size_t _batch_size, std::vector<size_t> _vec_sizes = {}, double _validation_split=0.0, 
-                   size_t _max_chunks = 0, size_t _num_columns = 0):
+                   std::vector<std::string> _filters, size_t _chunk_size, size_t _batch_size, std::vector<size_t> _vec_sizes = {}, 
+                   double _validation_split=0.0, size_t _max_chunks = 0, size_t _num_columns = 0):
     file_name(_file_name), tree_name(_tree_name), cols(_cols), filters(_filters), num_columns(_num_columns), 
     chunk_size(_chunk_size), batch_size(_batch_size), vec_sizes(_vec_sizes), validation_split(_validation_split), max_chunks(_max_chunks) 
     {
