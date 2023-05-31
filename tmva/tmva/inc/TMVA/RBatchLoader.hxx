@@ -1,5 +1,5 @@
-#ifndef TMVA_BATCHLOADER
-#define TMVA_BATCHLOADER
+#ifndef TMVA_RBatchLoader
+#define TMVA_RBatchLoader
 
 #include <iostream>
 #include <vector>
@@ -17,7 +17,7 @@
 namespace TMVA {
 namespace Experimental {
 
-class BatchLoader
+class RBatchLoader
 {
 private:
     const size_t batch_size, num_columns;
@@ -37,14 +37,14 @@ public:
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Constructors
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    BatchLoader(const size_t _batch_size, const size_t _num_columns)
+    RBatchLoader(const size_t _batch_size, const size_t _num_columns)
         : batch_size(_batch_size), num_columns(_num_columns)
     {
         rng = TMVA::RandomGenerator<TRandom3>(0);
     }
     
     
-    ~BatchLoader() {}
+    ~RBatchLoader() {}
 
 
 public:
@@ -181,4 +181,4 @@ public:
 } // namespace Experimental
 } // namespace TMVA
 
-#endif // TMVA_BATCHLOADER
+#endif // TMVA_RBatchLoader

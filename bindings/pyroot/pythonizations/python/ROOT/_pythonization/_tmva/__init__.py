@@ -19,12 +19,12 @@ from .. import pythonization
 from ._factory import Factory
 from ._dataloader import DataLoader
 from ._crossvalidation import CrossValidation
-from ._batchgenerator import GetBatchGenerators, GetTFDatasets, GetPyTorchDataLoaders
+from ._batchgenerator import GetRBatchGenerators, GetTFDatasets, GetPyTorchDataLoaders
 
 from ._rbdt import Compute, pythonize_rbdt
 
 python_tmva_functions = [
-    GetBatchGenerators,
+    GetRBatchGenerators,
     GetTFDatasets,
     GetPyTorchDataLoaders
 ]

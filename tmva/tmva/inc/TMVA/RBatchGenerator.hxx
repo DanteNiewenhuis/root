@@ -7,8 +7,8 @@
 
 #include "TMVA/RTensor.hxx"
 #include "ROOT/RDF/RDatasetSpec.hxx"
-#include "TMVA/ChunkLoader.hxx"
-#include "TMVA/BatchLoader.hxx"
+#include "TMVA/RChunkLoader.hxx"
+#include "TMVA/RBatchLoader.hxx"
 #include "TMVA/Tools.h"
 #include "TRandom3.h"
 
@@ -16,7 +16,7 @@ namespace TMVA {
 namespace Experimental {
 
 template<typename... Args>
-class BatchGenerator
+class RBatchGenerator
 {
 private:
     TMVA::RandomGenerator<TRandom3> rng;
@@ -26,7 +26,7 @@ private:
 
     std::string file_name, tree_name;
     
-    BatchLoader* batch_loader;
+    TMVA::Experimental::RBatchLoader* batch_loader;
 
     std::thread* loading_thread = 0;
     bool initialized = false;
@@ -50,7 +50,7 @@ private:
     // After, the chunk of data is split into batches of data.
     void LoadChunk(size_t current_chunk)
     {
-        TMVA::Experimental::ChunkLoader<Args...> func((*x_tensor), vec_sizes);
+        TMVA::Experimental::RChunkLoader<Args...> func((*x_tensor), vec_sizes);
 
         // Create DataFrame
         long long start_l = current_row;
@@ -96,7 +96,7 @@ private:
             passed_events = myCount.GetValue();
         }
         
-        // std::cout << "BatchGenerator::init => tensor: " << x_tensor << std::endl;
+        // std::cout << "RBatchGenerator::init => tensor: " << x_tensor << std::endl;
 
         current_row += progressed_events;
 
@@ -131,7 +131,7 @@ private:
 
 public:
 
-    BatchGenerator(std::string _file_name, std::string _tree_name, std::vector<std::string> _cols, 
+    RBatchGenerator(std::string _file_name, std::string _tree_name, std::vector<std::string> _cols, 
                    std::vector<std::string> _filters, size_t _chunk_size, size_t _batch_size, std::vector<size_t> _vec_sizes = {}, double _validation_split=0.0, 
                    size_t _max_chunks = 0, size_t _num_columns = 0):
     file_name(_file_name), tree_name(_tree_name), cols(_cols), filters(_filters), num_columns(_num_columns), 
@@ -149,16 +149,16 @@ public:
         TTree* t = f->Get<TTree>(tree_name.c_str());
         entries = t->GetEntries();
 
-        std::cout << "BatchGenerator => found " << entries << " entries in file." << std::endl;
+        std::cout << "RBatchGenerator => found " << entries << " entries in file." << std::endl;
 
-        batch_loader = new BatchLoader(batch_size, num_columns);
+        batch_loader = new TMVA::Experimental::RBatchLoader(batch_size, num_columns);
 
         x_tensor = new TMVA::Experimental::RTensor<float>({chunk_size, num_columns});
 
         rng = TMVA::RandomGenerator<TRandom3>(0);
     }
 
-    ~BatchGenerator()
+    ~RBatchGenerator()
     {
         StopLoading();
     } 
@@ -178,7 +178,7 @@ public:
         
         current_row = 0;
         batch_loader->Activate();
-        loading_thread = new std::thread(&BatchGenerator::LoadChunks, this);
+        loading_thread = new std::thread(&RBatchGenerator::LoadChunks, this);
     }
 
     // Returns the next batch of data if available. 

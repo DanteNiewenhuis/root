@@ -1,7 +1,7 @@
 class BaseGenerator:
 
     def get_template(self, file_name, tree_name, columns = None, vec_sizes = None):
-        """Generate a template for the BatchGenerator based on the given RDataFrame and columns
+        """Generate a template for the RBatchGenerator based on the given RDataFrame and columns
 
         Args:
             file_name (str): name of the root file.
@@ -11,7 +11,7 @@ class BaseGenerator:
 
         Returns:
             columns (list[str]): The columns of the DataFrame in the order that is used by the RDataFrame 
-            template (str): Template for the BatchGenerator
+            template (str): Template for the RBatchGenerator
         """
 
         from cppyy.gbl.ROOT import RDataFrame
@@ -78,7 +78,7 @@ class BaseGenerator:
         # main_folder = "../"
         # TODO: better linking when importing into ROOT
         # ROOT.gInterpreter.ProcessLine(
-        #     f'#include "{main_folder}Cpp_files/BatchGenerator.cpp"')
+        #     f'#include "{main_folder}Cpp_files/RBatchGenerator.cpp"')
 
         template = self.get_template(file_name, tree_name, columns, vec_sizes)
     
@@ -111,7 +111,7 @@ class BaseGenerator:
 
 
         from cppyy.gbl import TMVA
-        self.generator = TMVA.Experimental.BatchGenerator(template)(
+        self.generator = TMVA.Experimental.RBatchGenerator(template)(
             file_name, tree_name, self.input_columns, filters, chunk_size, batch_rows, vec_sizes, validation_split, max_chunks, self.num_columns)
 
         self.deactivated = False
@@ -152,7 +152,7 @@ class BaseGenerator:
         """Convert a RTensor into a NumPy array
 
         Args:
-            batch (RTensor): Batch returned from the BatchGenerator
+            batch (RTensor): Batch returned from the RBatchGenerator
 
         Returns:
             np.array: converted batch
@@ -191,7 +191,7 @@ class BaseGenerator:
         """Convert a RTensor into a PyTorch tensor
 
         Args:
-            batch (RTensor): Batch returned from the BatchGenerator
+            batch (RTensor): Batch returned from the RBatchGenerator
 
         Returns:
             torch.Tensor: converted batch
@@ -277,7 +277,7 @@ class BaseGenerator:
 
         return None
 
-class TrainBatchGenerator:
+class TrainRBatchGenerator:
 
     def __init__(self, base_generator: BaseGenerator, conversion_function):
         self.base_generator = base_generator
@@ -304,7 +304,7 @@ class TrainBatchGenerator:
             
             yield self.conversion_function(batch)
 
-class ValidationBatchGenerator:
+class ValidationRBatchGenerator:
 
     def __init__(self, base_generator: BaseGenerator, conversion_function):
         self.base_generator = base_generator
@@ -326,15 +326,15 @@ class ValidationBatchGenerator:
             yield self.conversion_function(batch)
 
 
-def GetBatchGenerators(file_name, tree_name, chunk_size, batch_rows,
+def GetRBatchGenerators(file_name, tree_name, chunk_size, batch_rows,
                  columns = None, vec_sizes = None, filters = [], target = None, 
                  weights = None, validation_split = 0.1, max_chunks = 1):
 
     base_generator = BaseGenerator(file_name, tree_name, chunk_size, batch_rows,
                  columns, vec_sizes, filters, target, weights, validation_split, max_chunks)
 
-    train_generator = TrainBatchGenerator(base_generator, base_generator.BatchToNumpy)
-    validation_generator = ValidationBatchGenerator(base_generator, base_generator.BatchToNumpy)
+    train_generator = TrainRBatchGenerator(base_generator, base_generator.BatchToNumpy)
+    validation_generator = ValidationRBatchGenerator(base_generator, base_generator.BatchToNumpy)
 
     return train_generator, validation_generator
 
@@ -347,8 +347,8 @@ def GetTFDatasets(file_name, tree_name, chunk_size, batch_rows,
     base_generator = BaseGenerator(file_name, tree_name, chunk_size, batch_rows,
                  columns, vec_sizes, filters, target, weights, validation_split, max_chunks)
 
-    train_generator = TrainBatchGenerator(base_generator, base_generator.BatchToTF)
-    validation_generator = ValidationBatchGenerator(base_generator, base_generator.BatchToTF)
+    train_generator = TrainRBatchGenerator(base_generator, base_generator.BatchToTF)
+    validation_generator = ValidationRBatchGenerator(base_generator, base_generator.BatchToTF)
 
     num_columns = len(train_generator.columns)
 
@@ -382,7 +382,7 @@ def GetPyTorchDataLoaders(file_name, tree_name, chunk_size, batch_rows,
     base_generator = BaseGenerator(file_name, tree_name, chunk_size, batch_rows,
                  columns, vec_sizes, filters, target, weights, validation_split, max_chunks)
 
-    train_generator = TrainBatchGenerator(base_generator, base_generator.BatchToPyTorch)
-    validation_generator = ValidationBatchGenerator(base_generator, base_generator.BatchToPyTorch)
+    train_generator = TrainRBatchGenerator(base_generator, base_generator.BatchToPyTorch)
+    validation_generator = ValidationRBatchGenerator(base_generator, base_generator.BatchToPyTorch)
 
     return train_generator, validation_generator

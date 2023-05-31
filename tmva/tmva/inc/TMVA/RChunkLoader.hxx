@@ -11,9 +11,9 @@
 namespace TMVA {
 namespace Experimental {
 
-// ChunkLoader class used to load content of a RDataFrame onto a RTensor.
+// RChunkLoader class used to load content of a RDataFrame onto a RTensor.
 template <typename First, typename... Rest>
-class ChunkLoader
+class RChunkLoader
 {
 
 private:
@@ -85,7 +85,7 @@ public:
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Constructor
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    ChunkLoader(TMVA::Experimental::RTensor<float>& _x_tensor, std::vector<size_t> _vec_sizes = std::vector<size_t>(), 
+    RChunkLoader(TMVA::Experimental::RTensor<float>& _x_tensor, std::vector<size_t> _vec_sizes = std::vector<size_t>(), 
                 bool _add_label=false, float _label=0)
         : x_tensor(_x_tensor), vec_sizes(_vec_sizes), add_label(_add_label), label(_label)
     {}
