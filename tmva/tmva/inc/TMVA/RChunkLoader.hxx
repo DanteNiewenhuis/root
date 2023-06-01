@@ -22,21 +22,21 @@ private:
     bool add_label;
     std::vector<size_t> vec_sizes;
     
-    TMVA::Experimental::RTensor<float>& x_tensor;
+    TMVA::Experimental::RTensor<float>& chunk_tensor;
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Value assigning
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     
-    // Load the final given value into x_tensor
+    // Load the final given value into chunk_tensor
     // Add a label to the end of the row if given
     template <typename First_T> 
     void assign_to_tensor(First_T first)
     {
-        x_tensor.GetData()[offset++] = first;
+        chunk_tensor.GetData()[offset++] = first;
 
         if (add_label) {
-            x_tensor.GetData()[offset++] = label;
+            chunk_tensor.GetData()[offset++] = label;
         }
     }
     // Vector version of the previous function
@@ -46,15 +46,15 @@ private:
         assign_vector(first);
 
         if (add_label) {
-            x_tensor.GetData()[offset++] = label;
+            chunk_tensor.GetData()[offset++] = label;
         }
     }
 
-    // Recursively loop through the given values, and load them onto the x_tensor
+    // Recursively loop through the given values, and load them onto the chunk_tensor
     template <typename First_T, typename... Rest_T> 
     void assign_to_tensor(First_T first, Rest_T... rest)
     {
-        x_tensor.GetData()[offset++] = first;
+        chunk_tensor.GetData()[offset++] = first;
 
         assign_to_tensor(std::forward<Rest_T>(rest)...);
     }
@@ -77,7 +77,7 @@ private:
         size_t vec_size = vec_sizes[vec_size_idx++];
 
         for (size_t i = 0; i < vec_size; i++) {
-            x_tensor.GetData()[offset++] = vec[i];
+            chunk_tensor.GetData()[offset++] = vec[i];
         }
     }
 
@@ -85,9 +85,9 @@ public:
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Constructor
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    RChunkLoader(TMVA::Experimental::RTensor<float>& _x_tensor, std::vector<size_t> _vec_sizes = std::vector<size_t>(), 
+    RChunkLoader(TMVA::Experimental::RTensor<float>& _chunk_tensor, std::vector<size_t> _vec_sizes = std::vector<size_t>(), 
                 bool _add_label=false, float _label=0)
-        : x_tensor(_x_tensor), vec_sizes(_vec_sizes), add_label(_add_label), label(_label)
+        : chunk_tensor(_chunk_tensor), vec_sizes(_vec_sizes), add_label(_add_label), label(_label)
     {}
 
     void operator()(First first, Rest... rest) 

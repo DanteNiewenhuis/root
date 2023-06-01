@@ -75,9 +75,9 @@
 // BDT inference
 #pragma link C++ class TMVA::Experimental::RBDT<TMVA::Experimental::BranchlessForest<float>>;
 #pragma link C++ class TMVA::Experimental::RBDT<TMVA::Experimental::BranchlessJittedForest<float>>;
-#pragma link C++ class TMVA::Experimental::RBatchGenerator;
-#pragma link C++ class TMVA::Experimental::RBatchLoader
-#pragma link C++ class TMVA::Experimental::RChunkLoader;
+#pragma link C++ class TMVA::Experimental::RBatchGenerator+;
+#pragma link C++ class TMVA::Experimental::RBatchLoader+;
+#pragma link C++ class TMVA::Experimental::RChunkLoader+;
 
 #endif
 #endif

@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <vector>
+#include <memory>
 
 // Imports for threading
 #include <queue>
@@ -28,9 +29,9 @@ private:
     // filled batch elements
     std::mutex batch_lock;
     std::condition_variable batch_condition;
-    std::queue<TMVA::Experimental::RTensor<float>*> training_batch_queue;
+    std::queue<std::unique_ptr<TMVA::Experimental::RTensor<float>>> training_batch_queue;
 
-    std::vector<TMVA::Experimental::RTensor<float>*> validation_batches;
+    std::vector<std::unique_ptr<TMVA::Experimental::RTensor<float>>> validation_batches;
     size_t valid_idx = 0;
 
 public:
@@ -63,7 +64,7 @@ public:
             return new TMVA::Experimental::RTensor<float>({0,0});
         }
 
-        TMVA::Experimental::RTensor<float>* res = training_batch_queue.front();
+        TMVA::Experimental::RTensor<float>* res = training_batch_queue.front().get();
         training_batch_queue.pop();
         return res;
     }
@@ -71,7 +72,7 @@ public:
     // return a batch of data
     TMVA::Experimental::RTensor<float>* GetValidationBatch()
     {
-        return validation_batches[valid_idx++];
+        return validation_batches[valid_idx++].get();
     }
 
     bool HasTrainData()
@@ -108,25 +109,24 @@ public:
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // Create a batch filled with the events on the given idx
-    void CreateBatch(TMVA::Experimental::RTensor<float>* x_tensor, std::vector<size_t> idx, std::vector<TMVA::Experimental::RTensor<float>*>& batches)
+    std::unique_ptr<TMVA::Experimental::RTensor<float>> CreateBatch(const TMVA::Experimental::RTensor<float>& x_tensor, std::vector<size_t> idx)
     { 
-        // Copy rows from x_tensor to the new batch
-        TMVA::Experimental::RTensor<float>* batch = new TMVA::Experimental::RTensor<float>({batch_size, num_columns});
-        for (int i = 0; i < batch_size; i++) {
-            std::copy(x_tensor->GetData() + (idx[i]*num_columns), 
-                        x_tensor->GetData() + ((idx[i]+1)*num_columns), 
+        auto batch = std::unique_ptr<TMVA::Experimental::RTensor<float>>(new TMVA::Experimental::RTensor<float>({batch_size, num_columns}));
+        for (size_t i = 0; i < batch_size; i++) {
+            std::copy(x_tensor.GetData() + (idx[i]*num_columns), 
+                        x_tensor.GetData() + ((idx[i]+1)*num_columns), 
                         batch->GetData() + i*num_columns);
         }   
 
-        batches.push_back(batch);
+        return batch;
     }
 
     // Add new tasks based on the given x_tensor
-    void CreateTrainingBatches(TMVA::Experimental::RTensor<float>* x_tensor, std::vector<size_t> row_order)
+    void CreateTrainingBatches(const TMVA::Experimental::RTensor<float>& x_tensor, std::vector<size_t> row_order)
     {
         std::shuffle(row_order.begin(), row_order.end(),rng); // Shuffle the order of idx
 
-        std::vector<TMVA::Experimental::RTensor<float>*> batches;
+        std::vector<std::unique_ptr<TMVA::Experimental::RTensor<float>>> batches;
         
         // Create tasks of batch_size untill all idx are used 
         for(size_t start = 0; (start + batch_size) <= row_order.size(); start += batch_size) {
@@ -139,12 +139,12 @@ public:
             }
 
             // Fill a batch 
-            CreateBatch(x_tensor, idx, batches);
+            batches.emplace_back(CreateBatch(x_tensor, idx));
         }
 
         std::unique_lock<std::mutex> lock(batch_lock);
         for (size_t i = 0; i < batches.size(); i++) {
-            training_batch_queue.push(batches[i]);
+            training_batch_queue.push(std::move(batches[i]));
         }
 
         lock.unlock();
@@ -153,10 +153,10 @@ public:
 
 
     // Add new tasks based on the given x_tensor
-    void CreateValidationBatches(TMVA::Experimental::RTensor<float>* x_tensor, std::vector<size_t> row_order)
-    {
-        std::vector<TMVA::Experimental::RTensor<float>*> batches;
-        
+    void CreateValidationBatches(const TMVA::Experimental::RTensor<float>& x_tensor, std::vector<size_t> row_order)
+    {   
+
+
         // Create tasks of batch_size untill all idx are used 
         for(size_t start = 0; (start + batch_size) <= row_order.size(); start += batch_size) {
             
@@ -166,11 +166,7 @@ public:
                 idx.push_back(row_order[i]);
             }
 
-            CreateBatch(x_tensor, idx, batches);
-        }
-
-        for (size_t i = 0; i < batches.size(); i++) {
-            validation_batches.push_back(batches[i]);
+            validation_batches.emplace_back(CreateBatch(x_tensor, idx));
         }
     }   
 

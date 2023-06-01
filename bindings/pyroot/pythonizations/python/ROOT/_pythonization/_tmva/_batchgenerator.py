@@ -198,8 +198,15 @@ class BaseGenerator:
         """
         import torch
 
+
         data = batch.GetData()
         data.reshape((self.batch_size,))
+        print(f"{data = }")
+        
+        import numpy as np
+        print(f"{np.array(data) = }")
+        print(f"{torch.Tensor(data) = }")
+
         return_data = torch.Tensor(data).reshape(
             self.batch_rows, self.num_columns)
 
@@ -228,15 +235,15 @@ class BaseGenerator:
 
         batch = self.BatchToNumpy(batch)
 
-        # TODO: improve this
+        # TODO: improve this by returning tensorflow tensors
         return batch
 
-        if type(batch) == tuple:
-            return [tf.constant(b, dtype=tf.float32) for b in batch] 
+        # if type(batch) == tuple:
+        #     return [tf.constant(b, dtype=tf.float32) for b in batch] 
 
-        b = tf.constant(batch, dtype="float")
+        # b = tf.constant(batch, dtype="float")
 
-        return b
+        # return b
     
     # Return a batch when available
     def GetTrainBatch(self):

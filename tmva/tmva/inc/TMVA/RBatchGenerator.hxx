@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 #include <thread>
+#include <memory>
 
 #include "TMVA/RTensor.hxx"
 #include "ROOT/RDF/RDatasetSpec.hxx"
@@ -26,16 +27,15 @@ private:
 
     std::string file_name, tree_name;
     
-    TMVA::Experimental::RBatchLoader* batch_loader;
+    std::unique_ptr<TMVA::Experimental::RBatchLoader> batch_loader;
 
-    std::thread* loading_thread = 0;
+    std::unique_ptr<std::thread> loading_thread;
     bool initialized = false;
 
     bool EoF = false, use_whole_file = true;
     double validation_split;
 
-    TMVA::Experimental::RTensor<float>* previous_batch = 0;
-    TMVA::Experimental::RTensor<float>* x_tensor;
+    std::unique_ptr<TMVA::Experimental::RTensor<float>> chunk_tensor;
 
     std::vector<std::vector<size_t>> training_idxs;
     std::vector<std::vector<size_t>> validation_idxs;
@@ -50,7 +50,7 @@ private:
     // After, the chunk of data is split into batches of data.
     void LoadChunk(size_t current_chunk)
     {
-        TMVA::Experimental::RChunkLoader<Args...> func((*x_tensor), vec_sizes);
+        TMVA::Experimental::RChunkLoader<Args...> func((*chunk_tensor), vec_sizes);
 
         // Create DataFrame
         long long start_l = current_row;
@@ -96,7 +96,7 @@ private:
             passed_events = myCount.GetValue();
         }
         
-        // std::cout << "RBatchGenerator::init => tensor: " << x_tensor << std::endl;
+        // std::cout << "RBatchGenerator::init => tensor: " << chunk_tensor << std::endl;
 
         current_row += progressed_events;
 
@@ -104,12 +104,12 @@ private:
         // First get the correct idices to use, then turn them into batches
         // Validation batches only have to be made in the first epoch
         if (training_idxs.size() > current_chunk) {
-            batch_loader->CreateTrainingBatches(x_tensor, training_idxs[current_chunk]);
+            batch_loader->CreateTrainingBatches(*chunk_tensor, training_idxs[current_chunk]);
         }
         else {
             createIdxs(current_chunk, progressed_events);
-            batch_loader->CreateTrainingBatches(x_tensor, training_idxs[current_chunk]);
-            batch_loader->CreateValidationBatches(x_tensor, validation_idxs[current_chunk]);
+            batch_loader->CreateTrainingBatches(*chunk_tensor, training_idxs[current_chunk]);
+            batch_loader->CreateValidationBatches(*chunk_tensor, validation_idxs[current_chunk]);
         }
     }
     void createIdxs(size_t current_chunk, size_t progressed_events)
@@ -151,9 +151,9 @@ public:
 
         std::cout << "RBatchGenerator => found " << entries << " entries in file." << std::endl;
 
-        batch_loader = new TMVA::Experimental::RBatchLoader(batch_size, num_columns);
+        batch_loader = std::make_unique<TMVA::Experimental::RBatchLoader>(batch_size, num_columns);
 
-        x_tensor = new TMVA::Experimental::RTensor<float>({chunk_size, num_columns});
+        chunk_tensor = std::unique_ptr<TMVA::Experimental::RTensor<float>>(new TMVA::Experimental::RTensor<float>({chunk_size, num_columns}));
 
         rng = TMVA::RandomGenerator<TRandom3>(0);
     }
@@ -165,35 +165,29 @@ public:
 
     void StopLoading()
     {
-        if (loading_thread != 0) {
+        if (loading_thread) {
             loading_thread->join();
-            delete loading_thread;
-            loading_thread = 0;
+            loading_thread = nullptr;
         }
     }
 
     void init()
     {
-        StopLoading(); // make sure the thread is currently not loading
-        
+        std::cout << "Cpp::RBatchGenerator => init" << std::endl;
+
         current_row = 0;
         batch_loader->Activate();
-        loading_thread = new std::thread(&RBatchGenerator::LoadChunks, this);
+        loading_thread = std::make_unique<std::thread>(&RBatchGenerator::LoadChunks, this);
     }
 
     // Returns the next batch of data if available. 
     // Returns empty RTensor otherwise.
     TMVA::Experimental::RTensor<float>* GetTrainBatch()
     {   
-        if (previous_batch != 0) {
-            delete previous_batch;
-            previous_batch = 0;
-        }
 
         // Get next batch if available
         if (batch_loader->HasTrainData()) {
             TMVA::Experimental::RTensor<float>* batch = batch_loader->GetTrainBatch();
-            previous_batch = batch;
             return batch;
         }
 
