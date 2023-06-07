@@ -22,7 +22,7 @@ private:
    TMVA::RandomGenerator<TRandom3> fRng;
 
    std::vector<std::string> fCols, fFilters;
-   size_t fNumColumns, fChunkSize, fMaxChunks, fBatchSize, fCurrentRow = 0, fNumEntries;
+   size_t fNumColumns, fChunkSize, fMaxChunks, fBatchSize, fCurrentRow = 0, fNumEntries, fMaxBatches;
 
    std::string fFileName, fTreeName;
 
@@ -166,13 +166,17 @@ public:
          fNumColumns = fCols.size();
       }
 
+      fMaxBatches = (fChunkSize / fBatchSize) * (1 - fValidationSplit);
+
+      std::cout << "RBatchGenerator => fMaxBatches: " << fMaxBatches << std::endl;
+
       // get the number of fNumEntries in the dataframe
       TFile *f = TFile::Open(fFileName.c_str());
       TTree *t = f->Get<TTree>(fTreeName.c_str());
       fNumEntries = t->GetEntries();
       std::cout << "RBatchGenerator => found " << fNumEntries << " fNumEntries in file." << std::endl;
 
-      fBatchLoader = std::make_unique<TMVA::Experimental::RBatchLoader>(fBatchSize, fNumColumns);
+      fBatchLoader = std::make_unique<TMVA::Experimental::RBatchLoader>(fBatchSize, fNumColumns, fMaxBatches);
       fRng = TMVA::RandomGenerator<TRandom3>(0);
 
       // Create tensor to load the chunk into
@@ -203,9 +207,6 @@ public:
    // Returns empty RTensor otherwise.
    TMVA::Experimental::RTensor<float> *GetTrainBatch()
    {
-
-      std::cout << "Cpp::RBatchGenerator::GetTrainBatch => Init" << std::endl;
-
       // Get next batch if available
       if (fBatchLoader->HasTrainData()) {
          fCurrentBatch = fBatchLoader->GetTrainBatch();
