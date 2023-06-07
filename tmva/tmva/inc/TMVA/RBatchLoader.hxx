@@ -19,7 +19,7 @@ namespace Experimental {
 
 class RBatchLoader {
 private:
-   const size_t fBatchSize, fNumColumns;
+   const size_t fBatchSize, fNumColumns, fMaxBatches;
 
    bool accept_tasks = false;
    TMVA::RandomGenerator<TRandom3> fRng;
@@ -36,7 +36,8 @@ public:
    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
    // Constructors
    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-   RBatchLoader(const size_t batchSize, const size_t numColumns) : fBatchSize(batchSize), fNumColumns(numColumns)
+   RBatchLoader(const size_t batchSize, const size_t numColumns, const size_t maxBatches)
+      : fBatchSize(batchSize), fNumColumns(numColumns), fMaxBatches(maxBatches)
    {
       fRng = TMVA::RandomGenerator<TRandom3>(0);
    }
@@ -60,6 +61,8 @@ public:
 
       std::unique_ptr<TMVA::Experimental::RTensor<float>> front = std::move(fTrainingBatchQueue.front());
       fTrainingBatchQueue.pop();
+
+      fBatchCondition.notify_all();
 
       return front;
    }
@@ -115,6 +118,16 @@ public:
    void CreateTrainingBatches(const TMVA::Experimental::RTensor<float> &chunkTensor, std::vector<size_t> rowOrder,
                               bool shuffle = true)
    {
+
+      // Wait until less than a full chunk of batches are in the queue before loading splitting the next chunk into
+      // batches
+      std::unique_lock<std::mutex> lock(fBatchLock);
+      fBatchCondition.wait(lock, [this]() { return (fTrainingBatchQueue.size() < fMaxBatches); });
+      lock.unlock();
+
+      std::cout << "CreateTrainingBatches => fTraningBatchQueue size loading: " << fTrainingBatchQueue.size()
+                << std::endl;
+
       if (shuffle) {
          std::shuffle(rowOrder.begin(), rowOrder.end(), fRng); // Shuffle the order of idx
       }
@@ -134,12 +147,12 @@ public:
          batches.emplace_back(CreateBatch(chunkTensor, idx));
       }
 
-      std::unique_lock<std::mutex> lock(fBatchLock);
+      std::unique_lock<std::mutex> lock_2(fBatchLock);
       for (size_t i = 0; i < batches.size(); i++) {
          fTrainingBatchQueue.push(std::move(batches[i]));
       }
 
-      lock.unlock();
+      lock_2.unlock();
       fBatchCondition.notify_one();
    }
 
