@@ -42,6 +42,7 @@ private:
    bool fShuffle = true;
 
    std::vector<size_t> fVecSizes;
+   float fVecPadding;
 
    ////////////////////////////////////////////////////////////////////////////////////////////////////////
    /// Functions
@@ -51,41 +52,44 @@ private:
    // After, the chunk of data is split into batches of data.
    void LoadChunk(size_t current_chunk)
    {
-      TMVA::Experimental::RChunkLoader<Args...> func((*fChunkTensor), fVecSizes);
+      TMVA::Experimental::RChunkLoader<Args...> func((*fChunkTensor), fVecSizes, fVecPadding);
 
-      // Create DataFrame
+      // Create TDataFrame of the chunk
+      // Use RDatasetSpec to start reading at the current row
       long long start_l = fCurrentRow;
-      long long end_l = start_l + fChunkSize;
       ROOT::RDF::Experimental::RDatasetSpec x_spec =
          ROOT::RDF::Experimental::RDatasetSpec()
             .AddSample({"", fTreeName, fFileName})
             .WithGlobalRange({start_l, std::numeric_limits<Long64_t>::max()});
       ROOT::RDataFrame x_rdf(x_spec);
 
-      size_t progressed_events, passed_events;
+      size_t processed_events, passed_events;
 
-      // add fFilters if given
+      // Load events if filters are given
       if (fFilters.size() > 0) {
-         auto x_filter = x_rdf.Filter(fFilters[0], "F1");
 
+         // Add the given filters to the RDataFrame
+         auto x_filter = x_rdf.Filter(fFilters[0], "F1");
          for (auto i = 1; i < fFilters.size(); i++) {
             auto name = "F" + std::to_string(i);
             x_filter = x_filter.Filter(fFilters[i], name);
          }
 
-         // add range
+         // add range to the DataFrame
          auto x_ranged = x_filter.Range(fChunkSize);
          auto myReport = x_ranged.Report();
 
          // load data
          x_ranged.Foreach(func, fCols);
 
-         // get the loading info
-         progressed_events = myReport.begin()->GetAll();
+         // Use the report to gather the number of events processed and passed.
+         // passed_events is used to determine the starting event of the next chunk
+         // processed_events is used to determine if the end of the database is reached.
+         processed_events = myReport.begin()->GetAll();
          passed_events = (myReport.end() - 1)->GetPass();
       }
 
-      // no fFilters given
+      // load events if no filters are given
       else {
          // add range
          auto x_ranged = x_rdf.Range(fChunkSize);
@@ -95,13 +99,13 @@ private:
          x_ranged.Foreach(func, fCols);
 
          // get loading info
-         progressed_events = myCount.GetValue();
+         processed_events = myCount.GetValue();
          passed_events = myCount.GetValue();
       }
 
       // std::cout << "RBatchGenerator::Init => tensor: " << fChunkTensor << std::endl;
 
-      fCurrentRow += progressed_events;
+      fCurrentRow += processed_events;
 
       // Create batches for the current_chunk.
       // First get the correct idices to use, then turn them into batches
@@ -109,14 +113,16 @@ private:
       if (fTrainingIdxs.size() > current_chunk) {
          fBatchLoader->CreateTrainingBatches(*fChunkTensor, fTrainingIdxs[current_chunk], fShuffle);
       } else {
-         createIdxs(current_chunk, progressed_events);
+         createIdxs(current_chunk, processed_events);
          fBatchLoader->CreateTrainingBatches(*fChunkTensor, fTrainingIdxs[current_chunk], fShuffle);
          fBatchLoader->CreateValidationBatches(*fChunkTensor, fValidationIdxs[current_chunk]);
       }
    }
-   void createIdxs(size_t current_chunk, size_t progressed_events)
+
+   // Split the event of the current chunk into validation and training events
+   void createIdxs(size_t current_chunk, size_t processed_events)
    {
-      std::vector<size_t> row_order = std::vector<size_t>(progressed_events);
+      std::vector<size_t> row_order = std::vector<size_t>(processed_events);
 
       std::iota(row_order.begin(), row_order.end(), 0);
 
@@ -124,7 +130,7 @@ private:
          std::shuffle(row_order.begin(), row_order.end(), fRng);
       }
 
-      size_t num_validation = progressed_events * fValidationSplit;
+      size_t num_validation = processed_events * fValidationSplit;
 
       std::vector<size_t> valid_idx({row_order.begin(), row_order.begin() + num_validation});
       std::vector<size_t> train_idx({row_order.begin() + num_validation, row_order.end()});
@@ -134,22 +140,24 @@ private:
    }
 
 public:
-   RBatchGenerator(std::string fileName, std::string treeName, std::vector<std::string> cols,
-                   std::vector<std::string> filters, size_t chunkSize, size_t batchSize,
-                   std::vector<size_t> vecSizes = {}, double validationSplit = 0.0, size_t maxChunks = 0,
-                   size_t numColumns = 0, bool shuffle = true)
+   RBatchGenerator(std::string fileName, std::string treeName, size_t chunkSize, size_t batchSize,
+                   std::vector<std::string> cols, std::vector<std::string> filters, std::vector<size_t> vecSizes = {},
+                   float vecPadding = 0.0, double validationSplit = 0.0, size_t maxChunks = 0, size_t numColumns = 0,
+                   bool shuffle = true)
       : fFileName(fileName),
         fTreeName(treeName),
-        fCols(cols),
-        fFilters(filters),
         fChunkSize(chunkSize),
         fBatchSize(batchSize),
+        fCols(cols),
+        fFilters(filters),
         fVecSizes(vecSizes),
+        fVecPadding(vecPadding),
         fValidationSplit(validationSplit),
         fMaxChunks(maxChunks),
         fNumColumns(numColumns),
         fShuffle(shuffle)
    {
+      std::cout << "BatchGenerator vec padding: " << fVecPadding << std::endl;
 
       if (fMaxChunks > 0) {
          fUseWholeFile = false;

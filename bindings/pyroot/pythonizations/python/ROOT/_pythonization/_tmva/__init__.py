@@ -10,6 +10,7 @@
 # For the list of contributors see $ROOTSYS/README/CREDITS.                    #
 ################################################################################
 
+from ._tree_inference import SaveXGBoost, pythonize_tree_inference
 import sys
 import cppyy
 from cppyy.gbl import gSystem
@@ -19,14 +20,14 @@ from .. import pythonization
 from ._factory import Factory
 from ._dataloader import DataLoader
 from ._crossvalidation import CrossValidation
-from ._batchgenerator import GetRBatchGenerators, GetTFDatasets, GetPyTorchDataLoaders
+from ._batchgenerator import CreateBatchGenerators, CreateTFDatasets, CreatePyTorchDataLoaders
 
 from ._rbdt import Compute, pythonize_rbdt
 
 python_tmva_functions = [
-    GetRBatchGenerators,
-    GetTFDatasets,
-    GetPyTorchDataLoaders
+    CreateBatchGenerators,
+    CreateTFDatasets,
+    CreatePyTorchDataLoaders
 ]
 
 
@@ -34,9 +35,8 @@ hasRDF = gSystem.GetFromPipe("root-config --has-dataframe") == "yes"
 if hasRDF:
     from ._rtensor import get_array_interface, add_array_interface_property, RTensorGetitem, pythonize_rtensor
 
-#this should be available only when xgboost is there ?
+# this should be available only when xgboost is there ?
 # We probably don't need a protection here since the code is run only when there is xgboost
-from ._tree_inference import SaveXGBoost, pythonize_tree_inference
 
 
 # list of python classes that are used to pythonize TMVA classes
@@ -54,7 +54,8 @@ def get_defined_attributes(klass, consider_base_classes=False):
     any of its base classes (except for `object`).
     """
 
-    blacklist = ["__dict__", "__doc__", "__hash__", "__module__", "__weakref__"]
+    blacklist = ["__dict__", "__doc__",
+                 "__hash__", "__module__", "__weakref__"]
 
     if not consider_base_classes:
         return sorted([attr for attr in klass.__dict__.keys() if attr not in blacklist])
@@ -139,7 +140,7 @@ def pythonize_tmva(klass, name):
 
     # need to strip the TMVA namespace
     ns_prefix = "TMVA::"
-    name = name[len(ns_prefix) : len(name)]
+    name = name[len(ns_prefix): len(name)]
 
     if not name in python_classes_dict:
         print("Error - class ", name, "is not in the pythonization list")

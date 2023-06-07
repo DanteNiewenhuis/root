@@ -1,24 +1,31 @@
+from __future__ import annotations
 
-from typing import Any, Callable, Tuple
+from typing import Any, Callable, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import numpy as np
+    import tensorflow as tf
+    import torch
 
 
 class BaseGenerator:
 
-    def get_template(self, file_name: str, tree_name: str, columns: list[str] = None, vec_sizes: list[int] = None) -> str:
-        """Generate a template for the RBatchGenerator based on the given RDataFrame and columns
+    def get_template(self, file_name: str, tree_name: str, columns: list[str] = None, max_vec_sizes: dict[str, int] = dict()) -> str:
+        """Generate a template for the RBatchGenerator based on the given RDataFrame and columns.
 
         Args:
             file_name (str): name of the root file.
             tree_name (str): name of the tree in the root file.
-            columns (list[str]): Columns that should be loaded. 
+            columns (list[str]): Columns that should be loaded.
                                  Defaults to loading all Columns in the RDataFrame
-            vec_sizes (list[int]): The length of each vector based column 
+            max_vec_sizes (list[int]): The length of each vector based column.
 
         Returns:
             template (str): Template for the RBatchGenerator
         """
 
-        from cppyy.gbl.ROOT import RDataFrame
+        # from cppyy.gbl.ROOT import RDataFrame
+        from ROOT import RDataFrame
         x_rdf = RDataFrame(tree_name, file_name)
 
         if not columns:
@@ -34,7 +41,8 @@ class BaseGenerator:
         self.output_columns = []
         # Get the types of the different columns
 
-        vec_size_idx = 0
+        max_vec_sizes_list = []
+
         for name in columns:
             name_str = str(name)
             self.input_columns.append(name_str)
@@ -42,38 +50,45 @@ class BaseGenerator:
             template_string += column_type + ","
 
             # If the column is a vector, add multiple columnnames to the output columns
-            if column_type in ["ROOT::RVec<int>", "ROOT::RVec<float>"]:
-                for i in range(vec_sizes[vec_size_idx]):
+            if name_str in max_vec_sizes:
+                max_vec_sizes_list.append(max_vec_sizes[name_str])
+                for i in range(max_vec_sizes[name_str]):
                     self.output_columns.append(f"{name_str}_{i}")
-                vec_size_idx += 1
+                continue
+
+            if column_type in ["ROOT::RVec<int>", "ROOT::RVec<float>"]:
+                raise ValueError(
+                    f"No max size given for feature {name_str}. Given max sizes: {max_vec_sizes}")
 
             else:
                 self.output_columns.append(name_str)
 
-        return template_string[:-1]
+        return template_string[:-1], max_vec_sizes_list
 
-    def __init__(self, file_name: str, tree_name: str, chunk_size: int, batch_rows: int,
-                 columns: list[str] = None, filters: list[str] = None, vec_sizes: list[str] = None, target: str = None,
+    def __init__(self, tree_name: str, file_name: str, batch_size: int, chunk_size: int, columns: list[str] = None,
+                 filters: list[str] = None, max_vec_sizes: dict[str, int] = None, vec_padding: int = 0, target: str = None,
                  weights: str = None, validation_split: float = 0.0, max_chunks: int = 0, shuffle: bool = True):
         """ Wrapper around the Cpp RBatchGenerator
 
         Args:
-            file_name (str): Path to the ROOT file
             tree_name (str): Name of the tree in the ROOT file
-            chunk_size (int): The size of the chunks loaded from the ROOT file. 
-                            Higher chunk size results in better randomization, but higher memory usage
-            batch_rows (int): Size of the returned chunks.
+            file_name (str): Path to the ROOT file
+            batch_size (int): Size of the returned chunks.
+            chunk_size (int): The size of the chunks loaded from the ROOT file.
+                            Higher chunk size results in better randomization, but higher memory usage.
             columns (list[str], optional): Columns to be returned. If not given, all columns are used.
             filters (list[str], optional): Filters to apply during loading. If not given, no filters are applied.
-            vec_sizes (list[int], optional): Size of each column that consists of vectors. 
-                                            Required when using vector based columns 
+            max_vec_sizes (dict[std, int], optional): Size of each column that consists of vectors.
+                                            Required when using vector based columns.
+            vec_padding (int): Value to pad vectors with if the vector is smaller than the given max vector length. 
+                                            Defaults is 0
             target (str, optional): Column that is used as target.
-            weights (str, optional): Column used to weight events. Can only be used when a target is given
-            validation_split (float, optional): The ratio of batches being kept for validation. 
+            weights (str, optional): Column used to weight events. Can only be used when a target is given.
+            validation_split (float, optional): The ratio of batches being kept for validation.
                                                 Value has to be between 0 and 1. Defaults to 0.0.
             max_chunks (int, optional): The number of chunks that should be loaded for an epoch.
-                                        If not given, the whole file is used
-            shuffle (bool): Batches consist of random events and are shuffled every epoch. Defaults to True
+                                        If not given, the whole file is used.
+            shuffle (bool): Batches consist of random events and are shuffled every epoch. Defaults to True.
 
         Raises:
             ImportError: _description_
@@ -81,18 +96,20 @@ class BaseGenerator:
             ValueError: _description_
             ValueError: _description_
         """
+
         try:
             import numpy as np
         except ImportError:
-            raise ImportError("Failed to import numpy in batchgenerator init")
+            raise ImportError(
+                "Failed to import NumPy during init. NumPy is required when using RBatchGenerator")
 
         if validation_split < 0.0 or validation_split > 1.0:
             raise ValueError(
                 f"The validation_split has to be in range [0.0, 1.0] \n given value is {validation_split}")
 
         # convert None types to lists for cppyy
-        if (vec_sizes == None):
-            vec_sizes = []
+        if (max_vec_sizes == None):
+            max_vec_sizes = dict()
         if (columns == None):
             columns = []
         if (filters == None):
@@ -103,11 +120,11 @@ class BaseGenerator:
         # ROOT.gInterpreter.ProcessLine(
         #     f'#include "{main_folder}Cpp_files/RBatchGenerator.cpp"')
 
-        template = self.get_template(file_name, tree_name, columns, vec_sizes)
+        template, max_vec_sizes_list = self.get_template(
+            file_name, tree_name, columns, max_vec_sizes)
 
         self.num_columns = len(self.output_columns)
-        self.batch_rows = batch_rows
-        self.batch_size = batch_rows * self.num_columns
+        self.batch_size = batch_size
 
         # Handle target
         self.target_given = target is not None
@@ -132,10 +149,11 @@ class BaseGenerator:
 
         # Create C++ batch generator
 
-        from cppyy.gbl import TMVA
+        # from cppyy.gbl import TMVA
+        from ROOT import TMVA
         self.generator = TMVA.Experimental.RBatchGenerator(template)(
-            file_name, tree_name, self.input_columns, filters, chunk_size, batch_rows,
-            vec_sizes, validation_split, max_chunks, self.num_columns, shuffle)
+            file_name, tree_name, chunk_size, batch_size, self.input_columns, filters,
+            max_vec_sizes_list, vec_padding, validation_split, max_chunks, self.num_columns, shuffle)
 
         self.deactivated = False
 
@@ -153,7 +171,8 @@ class BaseGenerator:
         self.generator.StopLoading()
 
     def GetSample(self):
-        """Return a sample of data that has the same size and types as the actual result
+        """ Return a sample of data that has the same size and types as the actual result.
+            This sample can be used to define the shape and size of the output 
 
         Returns:
             np.ndarray: data sample
@@ -163,22 +182,23 @@ class BaseGenerator:
         except ImportError:
             raise ImportError("Failed to import numpy in batchgenerator init")
 
+        # Split the target and weight
         if not self.target_given:
-            return np.zeros((self.batch_rows, self.num_columns))
+            return np.zeros((self.batch_size, self.num_columns))
 
         if not self.weights_given:
-            return np.zeros((self.batch_rows, self.num_columns-1)), np.zeros((self.batch_rows))
+            return np.zeros((self.batch_size, self.num_columns-1)), np.zeros((self.batch_size))
 
-        return np.zeros((self.batch_rows, self.num_columns-2)), np.zeros((self.batch_rows)), np.zeros((self.batch_rows))
+        return np.zeros((self.batch_size, self.num_columns-2)), np.zeros((self.batch_size)), np.zeros((self.batch_size))
 
-    def ConvertBatchToNumpy(self, batch: Any) -> Any:
+    def ConvertBatchToNumpy(self, batch: "RTensor") -> np.ndarray:
         """Convert a RTensor into a NumPy array
 
         Args:
             batch (RTensor): Batch returned from the RBatchGenerator
 
         Returns:
-            np.array: converted batch
+            np.ndarray: converted batch
         """
         try:
             import numpy as np
@@ -186,12 +206,10 @@ class BaseGenerator:
             raise ImportError("Failed to import numpy in batchgenerator init")
 
         data = batch.GetData()
-        data.reshape((self.batch_size,))
-
-        print(f"ConvertBatchToNumpy {np.array(data) = }")
+        data.reshape((self.batch_size*self.num_columns,))
 
         return_data = np.array(data).reshape(
-            self.batch_rows, self.num_columns)
+            self.batch_size, self.num_columns)
 
         # Splice target column from the data if weight is given
         if self.target_given:
@@ -213,7 +231,7 @@ class BaseGenerator:
 
         return return_data
 
-    def ConvertBatchToPyTorch(self, batch: Any) -> Any:
+    def ConvertBatchToPyTorch(self, batch: Any) -> torch.Tensor:
         """Convert a RTensor into a PyTorch tensor
 
         Args:
@@ -225,12 +243,10 @@ class BaseGenerator:
         import torch
 
         data = batch.GetData()
-        data.reshape((self.batch_size,))
-
-        print(f"ConvertBatchToPyTorch {torch.Tensor(data) = }")
+        data.reshape((self.batch_size*self.num_columns,))
 
         return_data = torch.Tensor(data).reshape(
-            self.batch_rows, self.num_columns)
+            self.batch_size, self.num_columns)
 
         # Splice target column from the data if weight is given
         if self.target_given:
@@ -252,7 +268,7 @@ class BaseGenerator:
 
         return return_data
 
-    def ConvertBatchToTF(self, batch: Any) -> Any:
+    def ConvertBatchToTF(self, batch: Any) -> np.ndarray:
         """ PLACEHOLDER: at this moment this function only calls the ConvertBatchToNumpy function.
             In the Future this function will be used to convert to TF tensors directly
 
@@ -260,7 +276,7 @@ class BaseGenerator:
             batch (RTensor): Batch returned from the RBatchGenerator
 
         Returns:
-            np.array: converted batch
+            np.ndarray: converted batch
         """
         import tensorflow as tf
 
@@ -326,6 +342,21 @@ class TrainRBatchGenerator:
     def columns(self) -> list[str]:
         return self.base_generator.output_columns
 
+    def __iter__(self):
+
+        self._callable = self.__call__()
+
+        return self
+
+    def __next__(self):
+
+        batch = self._callable.__next__()
+
+        if batch is None:
+            raise StopIteration
+
+        return batch
+
     def __call__(self) -> Any:
         """ Start the loading of batches and Yield the results
 
@@ -361,6 +392,21 @@ class ValidationRBatchGenerator:
     def columns(self):
         return self.base_generator.output_columns
 
+    def __iter__(self):
+
+        self._callable = self.__call__()
+
+        return self
+
+    def __next__(self):
+
+        batch = self._callable.__next__()
+
+        if batch is None:
+            raise StopIteration
+
+        return batch
+
     def __call__(self) -> Any:
         """ Loop through the validation batches
 
@@ -378,22 +424,22 @@ class ValidationRBatchGenerator:
             yield self.conversion_function(batch)
 
 
-def GetRBatchGenerators(file_name: str, tree_name: str, chunk_size: int, batch_rows: int,
-                        columns: list[str] = None, filters: list[str] = None, vec_sizes: list[int] = None,
-                        target: str = None, weights: str = None, validation_split: float = 0.0, max_chunks: int = 0,
-                        shuffle: bool = True) -> Tuple[TrainRBatchGenerator, ValidationRBatchGenerator]:
+def CreateBatchGenerators(tree_name: str, file_name: str, batch_size: int, chunk_size: int, columns: list[str] = None,
+                          filters: list[str] = None, max_vec_sizes: dict[str, int] = None, vec_padding: int = 0,
+                          target: str = None, weights: str = None, validation_split: float = 0.0, max_chunks: int = 0,
+                          shuffle: bool = True) -> Tuple[TrainRBatchGenerator, ValidationRBatchGenerator]:
     """ Return two batch generators based on the given ROOT file and tree.
         The first generator returns training batches, while the second generator returns validation batches
 
     Args:
-        file_name (str): Path to the ROOT file
         tree_name (str): Name of the tree in the ROOT file
+        file_name (str): Path to the ROOT file
+        batch_size (int): Size of the returned chunks.
         chunk_size (int): The size of the chunks loaded from the ROOT file. 
                           Higher chunk size results in better randomization, but higher memory usage
-        batch_rows (int): Size of the returned chunks.
         columns (list[str], optional): Columns to be returned. If not given, all columns are used.
         filters (list[str], optional): Filters to apply during loading. If not given, no filters are applied.
-        vec_sizes (list[int], optional): Size of each column that consists of vectors. 
+        max_vec_sizes (list[int], optional): Size of each column that consists of vectors. 
                                          Required when using vector based columns 
         target (str, optional): Column that is used as target.
         weights (str, optional): Column used to weight events. Can only be used when a target is given
@@ -409,8 +455,8 @@ def GetRBatchGenerators(file_name: str, tree_name: str, chunk_size: int, batch_r
             NOTE: the validation batches are loaded during the training. Before training, the validation generator 
             will return no batches. 
     """
-    base_generator = BaseGenerator(file_name, tree_name, chunk_size, batch_rows, columns,
-                                   filters, vec_sizes, target, weights, validation_split, max_chunks, shuffle)
+    base_generator = BaseGenerator(file_name, tree_name, chunk_size, batch_size, columns,
+                                   filters, max_vec_sizes, vec_padding, target, weights, validation_split, max_chunks, shuffle)
 
     train_generator = TrainRBatchGenerator(
         base_generator, base_generator.ConvertBatchToNumpy)
@@ -420,22 +466,22 @@ def GetRBatchGenerators(file_name: str, tree_name: str, chunk_size: int, batch_r
     return train_generator, validation_generator
 
 
-def GetTFDatasets(file_name: str, tree_name: str, chunk_size: int, batch_rows: int,
-                  columns: list[str] = None, filters: list[str] = None, vec_sizes: list[int] = None,
-                  target: str = None, weights: str = None, validation_split: float = 0.0, max_chunks: int = 0,
-                  shuffle: bool = True) -> Tuple[TrainRBatchGenerator, ValidationRBatchGenerator]:
+def CreateTFDatasets(tree_name: str, file_name: str, batch_size: int, chunk_size: int, columns: list[str] = None,
+                     filters: list[str] = None, max_vec_sizes: dict[str, int] = None, vec_padding: int = 0,
+                     target: str = None, weights: str = None, validation_split: float = 0.0, max_chunks: int = 0,
+                     shuffle: bool = True) -> Tuple[tf.data.Dataset, tf.data.Dataset]:
     """ Return two Tensorflow Datasets based on the given ROOT file and tree.
         The first dataset returns training batches, while the second dataset returns validation batches
 
     Args:
-        file_name (str): Path to the ROOT file
         tree_name (str): Name of the tree in the ROOT file
+        file_name (str): Path to the ROOT file
+        batch_size (int): Size of the returned chunks.
         chunk_size (int): The size of the chunks loaded from the ROOT file. 
                           Higher chunk size results in better randomization, but higher memory usage
-        batch_rows (int): Size of the returned chunks.
         columns (list[str], optional): Columns to be returned. If not given, all columns are used.
         filters (list[str], optional): Filters to apply during loading. If not given, no filters are applied.
-        vec_sizes (list[int], optional): Size of each column that consists of vectors. 
+        max_vec_sizes (list[int], optional): Size of each column that consists of vectors. 
                                          Required when using vector based columns 
         target (str, optional): Column that is used as target.
         weights (str, optional): Column used to weight events. Can only be used when a target is given
@@ -453,8 +499,8 @@ def GetTFDatasets(file_name: str, tree_name: str, chunk_size: int, batch_rows: i
     """
     import tensorflow as tf
 
-    base_generator = BaseGenerator(file_name, tree_name, chunk_size, batch_rows, columns,
-                                   vec_sizes, filters, target, weights, validation_split, max_chunks, shuffle)
+    base_generator = BaseGenerator(file_name, tree_name, chunk_size, batch_size, columns, filters,
+                                   max_vec_sizes, vec_padding, target, weights, validation_split, max_chunks, shuffle)
 
     train_generator = TrainRBatchGenerator(
         base_generator, base_generator.ConvertBatchToTF)
@@ -466,21 +512,20 @@ def GetTFDatasets(file_name: str, tree_name: str, chunk_size: int, batch_rows: i
     # No target and weights given
     if (target == None):
         batch_signature = (tf.TensorSpec(
-            shape=(batch_rows, num_columns), dtype=tf.float32))
+            shape=(batch_size, num_columns), dtype=tf.float32))
 
     # Target given, no weights given
     if (target != None and weights == None):
-        batch_signature = (tf.TensorSpec(shape=(batch_rows, num_columns-1), dtype=tf.float32),
-                           tf.TensorSpec(shape=(batch_rows,), dtype=tf.float32))
+        batch_signature = (tf.TensorSpec(shape=(batch_size, num_columns-1), dtype=tf.float32),
+                           tf.TensorSpec(shape=(batch_size,), dtype=tf.float32))
 
     # Target given, no weights given
     if (target != None and weights != None):
-        batch_signature = (tf.TensorSpec(shape=(batch_rows, num_columns-2), dtype=tf.float32),
-                           tf.TensorSpec(shape=(batch_rows,),
+        batch_signature = (tf.TensorSpec(shape=(batch_size, num_columns-2), dtype=tf.float32),
+                           tf.TensorSpec(shape=(batch_size,),
                                          dtype=tf.float32),
-                           tf.TensorSpec(shape=(batch_rows,), dtype=tf.float32))
+                           tf.TensorSpec(shape=(batch_size,), dtype=tf.float32))
 
-    # TODO: Add support for no target en weights
     ds_train = tf.data.Dataset.from_generator(
         train_generator, output_signature=batch_signature)
 
@@ -490,22 +535,22 @@ def GetTFDatasets(file_name: str, tree_name: str, chunk_size: int, batch_rows: i
     return ds_train, ds_validation
 
 
-def GetPyTorchDataLoaders(file_name: str, tree_name: str, chunk_size: int, batch_rows: int,
-                          columns: list[str] = None, filters: list[str] = None, vec_sizes: list[int] = None,
-                          target: str = None, weights: str = None, validation_split: float = 0.0, max_chunks: int = 0,
-                          shuffle: bool = True) -> Tuple[TrainRBatchGenerator, ValidationRBatchGenerator]:
+def CreatePyTorchDataLoaders(tree_name: str, file_name: str, batch_size: int, chunk_size: int, columns: list[str] = None,
+                             filters: list[str] = None, max_vec_sizes: dict[str, int] = None, vec_padding: int = 0,
+                             target: str = None, weights: str = None, validation_split: float = 0.0, max_chunks: int = 0,
+                             shuffle: bool = True) -> Tuple[TrainRBatchGenerator, ValidationRBatchGenerator]:
     """ Return two batch generators based on the given ROOT file and tree.
         The first generator returns training batches, while the second generator returns validation batches
 
     Args:
-        file_name (str): Path to the ROOT file
         tree_name (str): Name of the tree in the ROOT file
+        file_name (str): Path to the ROOT file
+        batch_size (int): Size of the returned chunks.
         chunk_size (int): The size of the chunks loaded from the ROOT file. 
                           Higher chunk size results in better randomization, but higher memory usage
-        batch_rows (int): Size of the returned chunks.
         columns (list[str], optional): Columns to be returned. If not given, all columns are used.
         filters (list[str], optional): Filters to apply during loading. If not given, no filters are applied.
-        vec_sizes (list[int], optional): Size of each column that consists of vectors. 
+        max_vec_sizes (list[int], optional): Size of each column that consists of vectors. 
                                          Required when using vector based columns 
         target (str, optional): Column that is used as target.
         weights (str, optional): Column used to weight events. Can only be used when a target is given
@@ -521,8 +566,8 @@ def GetPyTorchDataLoaders(file_name: str, tree_name: str, chunk_size: int, batch
             NOTE: the validation batches are loaded during the training. Before training, the validation generator 
             will return no batches. 
     """
-    base_generator = BaseGenerator(file_name, tree_name, chunk_size, batch_rows, columns,
-                                   vec_sizes, filters, target, weights, validation_split, max_chunks, shuffle)
+    base_generator = BaseGenerator(file_name, tree_name, chunk_size, batch_size, columns, filters,
+                                   max_vec_sizes, vec_padding, target, weights, validation_split, max_chunks, shuffle)
 
     train_generator = TrainRBatchGenerator(
         base_generator, base_generator.ConvertBatchToPyTorch)

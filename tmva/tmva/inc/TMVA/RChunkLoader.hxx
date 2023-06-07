@@ -16,21 +16,23 @@ template <typename First, typename... Rest>
 class RChunkLoader {
 
 private:
-   size_t offset = 0, fVecSizeIdx = 0;
-   std::vector<size_t> fVecSizes;
+   size_t fOffset = 0, fVecSizeIdx = 0;
+   std::vector<size_t> fMaxVecSizes;
 
-   TMVA::Experimental::RTensor<float> &fchunkTensor;
+   float fVecPadding;
+
+   TMVA::Experimental::RTensor<float> &fChunkTensor;
 
    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
    // Value assigning
    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-   // Load the final given value into fchunkTensor
+   // Load the final given value into fChunkTensor
    // Add a label to the end of the row if given
    template <typename First_T>
    void AssignToTensor(First_T first)
    {
-      fchunkTensor.GetData()[offset++] = first;
+      fChunkTensor.GetData()[fOffset++] = first;
    }
    // Vector version of the previous function
    template <typename VecType>
@@ -39,11 +41,11 @@ private:
       AssignVector(first);
    }
 
-   // Recursively loop through the given values, and load them onto the fchunkTensor
+   // Recursively loop through the given values, and load them onto the fChunkTensor
    template <typename First_T, typename... Rest_T>
    void AssignToTensor(First_T first, Rest_T... rest)
    {
-      fchunkTensor.GetData()[offset++] = first;
+      fChunkTensor.GetData()[fOffset++] = first;
 
       AssignToTensor(std::forward<Rest_T>(rest)...);
    }
@@ -64,10 +66,16 @@ private:
    template <typename VecType>
    void AssignVector(ROOT::RVec<VecType> vec)
    {
-      size_t vec_size = fVecSizes[fVecSizeIdx++];
+      size_t max_vec_size = fMaxVecSizes[fVecSizeIdx++];
+      size_t vec_size = vec.size();
 
-      for (size_t i = 0; i < vec_size; i++) {
-         fchunkTensor.GetData()[offset++] = vec[i];
+      for (size_t i = 0; i < max_vec_size; i++) {
+         if (i < vec_size) {
+            // TODO: add better type conversion
+            fChunkTensor.GetData()[fOffset++] = vec[i];
+         } else {
+            fChunkTensor.GetData()[fOffset++] = fVecPadding;
+         }
       }
    }
 
@@ -75,9 +83,11 @@ public:
    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
    // Constructor
    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-   RChunkLoader(TMVA::Experimental::RTensor<float> &chunkTensor, std::vector<size_t> vecSizes = std::vector<size_t>())
-      : fchunkTensor(chunkTensor), fVecSizes(vecSizes)
+   RChunkLoader(TMVA::Experimental::RTensor<float> &chunkTensor,
+                std::vector<size_t> maxVecSizes = std::vector<size_t>(), float vecPadding = 0.0)
+      : fChunkTensor(chunkTensor), fMaxVecSizes(maxVecSizes), fVecPadding(vecPadding)
    {
+      std::cout << "Chunk Loader vec padding: " << fVecPadding << std::endl;
    }
 
    void operator()(First first, Rest... rest)
