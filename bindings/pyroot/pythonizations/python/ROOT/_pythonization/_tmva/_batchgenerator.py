@@ -169,6 +169,10 @@ class BaseGenerator:
         """
         self.generator.Activate()
 
+    def __del__(self):
+        print(f"DELETE base generator")
+        self.DeActivate()
+
     def DeActivate(self):
         """Initialize the generator to be used for a loop
         """

@@ -203,6 +203,7 @@ public:
 
    void Activate()
    {
+      DeActivate();
 
       fCurrentRow = 0;
       fActivated = true;
