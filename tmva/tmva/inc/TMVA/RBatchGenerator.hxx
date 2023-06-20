@@ -5,6 +5,8 @@
 #include <vector>
 #include <thread>
 #include <memory>
+#include <cmath>
+#include <mutex>
 
 #include "TMVA/RTensor.hxx"
 #include "ROOT/RDF/RDatasetSpec.hxx"
@@ -39,10 +41,12 @@ private:
    std::vector<std::vector<size_t>> fTrainingIdxs;
    std::vector<std::vector<size_t>> fValidationIdxs;
 
-   bool fShuffle = true;
+   bool fShuffle = true, fActivated;
 
    std::vector<size_t> fVecSizes;
    float fVecPadding;
+
+   std::mutex fDataFrameLock;
 
    ////////////////////////////////////////////////////////////////////////////////////////////////////////
    /// Functions
@@ -52,6 +56,8 @@ private:
    // After, the chunk of data is split into batches of data.
    void LoadChunk(size_t current_chunk)
    {
+
+      const std::lock_guard<std::mutex> lock(fDataFrameLock);
       TMVA::Experimental::RChunkLoader<Args...> func((*fChunkTensor), fVecSizes, fVecPadding);
 
       // Create TDataFrame of the chunk
@@ -130,7 +136,7 @@ private:
          std::shuffle(row_order.begin(), row_order.end(), fRng);
       }
 
-      size_t num_validation = processed_events * fValidationSplit;
+      size_t num_validation = ceil(processed_events * fValidationSplit);
 
       std::vector<size_t> valid_idx({row_order.begin(), row_order.begin() + num_validation});
       std::vector<size_t> train_idx({row_order.begin() + num_validation, row_order.end()});
@@ -157,8 +163,6 @@ public:
         fNumColumns(numColumns),
         fShuffle(shuffle)
    {
-      std::cout << "BatchGenerator vec padding: " << fVecPadding << std::endl;
-
       if (fMaxChunks > 0) {
          fUseWholeFile = false;
       }
@@ -166,7 +170,7 @@ public:
          fNumColumns = fCols.size();
       }
 
-      fMaxBatches = (fChunkSize / fBatchSize) * (1 - fValidationSplit);
+      fMaxBatches = ceil((fChunkSize / fBatchSize) * (1 - fValidationSplit));
 
       std::cout << "RBatchGenerator => fMaxBatches: " << fMaxBatches << std::endl;
 
@@ -184,21 +188,25 @@ public:
          new TMVA::Experimental::RTensor<float>({fChunkSize, fNumColumns}));
    }
 
-   ~RBatchGenerator() { StopLoading(); }
+   ~RBatchGenerator() { DeActivate(); }
 
-   void StopLoading()
+   void DeActivate()
    {
+      fBatchLoader->DeActivate();
+      fActivated = false;
+
       if (fLoadingThread) {
          fLoadingThread->join();
          fLoadingThread = nullptr;
       }
    }
 
-   void Init()
+   void Activate()
    {
-      std::cout << "Cpp::RBatchGenerator => Init" << std::endl;
 
       fCurrentRow = 0;
+      fActivated = true;
+
       fBatchLoader->Activate();
       fLoadingThread = std::make_unique<std::thread>(&RBatchGenerator::LoadChunks, this);
    }
@@ -213,8 +221,7 @@ public:
          return fCurrentBatch.get();
       }
 
-      // return empty batch if all events have been used
-      return new TMVA::Experimental::RTensor<float>({0, 0});
+      return nullptr;
    }
 
    // Returns the next batch of data if available.
@@ -227,7 +234,7 @@ public:
       }
 
       // return empty batch if all events have been used
-      return new TMVA::Experimental::RTensor<float>({0, 0});
+      return nullptr;
    }
 
    bool HasTrainData()
@@ -254,15 +261,15 @@ public:
 
       // Load chunks untill the end of the file is reached.
       // Stop loading if a maximum number of chunks is provided
-      for (size_t i = 0; ((i < fMaxChunks) || fUseWholeFile); i++) {
+      for (size_t i = 0; ((i < fMaxChunks) || fUseWholeFile) && fActivated; i++) {
          LoadChunk(i);
          if (fCurrentRow >= fNumEntries) {
             break;
          }
       }
 
-      fBatchLoader->DeActivate();
       fEoF = true;
+      fBatchLoader->DeActivate();
    }
 
    void StartValidation() { fBatchLoader->StartValidation(); }

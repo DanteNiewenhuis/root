@@ -42,7 +42,11 @@ public:
       fRng = TMVA::RandomGenerator<TRandom3>(0);
    }
 
-   ~RBatchLoader() {}
+   ~RBatchLoader()
+   {
+      std::cout << "Cpp::RBatchLoader => Deconstructor" << std::endl;
+      DeActivate();
+   }
 
 public:
    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -52,6 +56,7 @@ public:
    // return a batch of data
    std::unique_ptr<TMVA::Experimental::RTensor<float>> GetTrainBatch()
    {
+
       std::unique_lock<std::mutex> lock(fBatchLock);
       fBatchCondition.wait(lock, [this]() { return !fTrainingBatchQueue.empty() || !accept_tasks; });
 
@@ -63,7 +68,6 @@ public:
       fTrainingBatchQueue.pop();
 
       fBatchCondition.notify_all();
-
       return front;
    }
 
@@ -85,6 +89,7 @@ public:
    // Activate the threads again to accept new tasks
    void Activate()
    {
+      std::cout << "Cpp::RBatchLoader => Activate" << std::endl;
       accept_tasks = true;
       fBatchCondition.notify_all();
    }
@@ -92,8 +97,9 @@ public:
    // Wait untill all tasks are handled, then join the threads
    void DeActivate()
    {
+      std::cout << "RBatchLoader => DeActivate" << std::endl;
       accept_tasks = false;
-      fBatchCondition.notify_one();
+      fBatchCondition.notify_all();
    }
 
    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -118,15 +124,15 @@ public:
    void CreateTrainingBatches(const TMVA::Experimental::RTensor<float> &chunkTensor, std::vector<size_t> rowOrder,
                               bool shuffle = true)
    {
-
       // Wait until less than a full chunk of batches are in the queue before loading splitting the next chunk into
       // batches
       std::unique_lock<std::mutex> lock(fBatchLock);
-      fBatchCondition.wait(lock, [this]() { return (fTrainingBatchQueue.size() < fMaxBatches); });
-      lock.unlock();
+      fBatchCondition.wait(lock, [this]() { return (fTrainingBatchQueue.size() < fMaxBatches) || !accept_tasks; });
+      if (!accept_tasks) {
+         return;
+      }
 
-      std::cout << "CreateTrainingBatches => fTraningBatchQueue size loading: " << fTrainingBatchQueue.size()
-                << std::endl;
+      lock.unlock();
 
       if (shuffle) {
          std::shuffle(rowOrder.begin(), rowOrder.end(), fRng); // Shuffle the order of idx

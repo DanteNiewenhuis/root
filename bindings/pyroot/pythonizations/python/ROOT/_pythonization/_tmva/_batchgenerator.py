@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 class BaseGenerator:
 
-    def get_template(self, file_name: str, tree_name: str, columns: list[str] = None, max_vec_sizes: dict[str, int] = dict()) -> str:
+    def get_template(self, tree_name: str, file_name: str, columns: list[str] = None, max_vec_sizes: dict[str, int] = dict()) -> str:
         """Generate a template for the RBatchGenerator based on the given RDataFrame and columns.
 
         Args:
@@ -103,6 +103,10 @@ class BaseGenerator:
             raise ImportError(
                 "Failed to import NumPy during init. NumPy is required when using RBatchGenerator")
 
+        if chunk_size < batch_size:
+            raise ValueError(
+                f"chunk_size cannot be smaller than batch_size: chunk_size: {chunk_size}, batch_size: {batch_size}")
+
         if validation_split < 0.0 or validation_split > 1.0:
             raise ValueError(
                 f"The validation_split has to be in range [0.0, 1.0] \n given value is {validation_split}")
@@ -121,7 +125,7 @@ class BaseGenerator:
         #     f'#include "{main_folder}Cpp_files/RBatchGenerator.cpp"')
 
         template, max_vec_sizes_list = self.get_template(
-            file_name, tree_name, columns, max_vec_sizes)
+            tree_name, file_name, columns, max_vec_sizes)
 
         self.num_columns = len(self.output_columns)
         self.batch_size = batch_size
@@ -157,18 +161,18 @@ class BaseGenerator:
 
         self.deactivated = False
 
-    def start_validation(self):
-        self.generator.start_validation()
+    def StartValidation(self):
+        self.generator.StartValidation()
 
     def Activate(self):
         """Initialize the generator to be used for a loop
         """
-        self.generator.Init()
+        self.generator.Activate()
 
     def DeActivate(self):
         """Initialize the generator to be used for a loop
         """
-        self.generator.StopLoading()
+        self.generator.DeActivate()
 
     def GetSample(self):
         """ Return a sample of data that has the same size and types as the actual result.
@@ -187,9 +191,9 @@ class BaseGenerator:
             return np.zeros((self.batch_size, self.num_columns))
 
         if not self.weights_given:
-            return np.zeros((self.batch_size, self.num_columns-1)), np.zeros((self.batch_size))
+            return np.zeros((self.batch_size, self.num_columns - 1)), np.zeros((self.batch_size))
 
-        return np.zeros((self.batch_size, self.num_columns-2)), np.zeros((self.batch_size)), np.zeros((self.batch_size))
+        return np.zeros((self.batch_size, self.num_columns - 2)), np.zeros((self.batch_size)), np.zeros((self.batch_size))
 
     def ConvertBatchToNumpy(self, batch: "RTensor") -> np.ndarray:
         """Convert a RTensor into a NumPy array
@@ -206,7 +210,7 @@ class BaseGenerator:
             raise ImportError("Failed to import numpy in batchgenerator init")
 
         data = batch.GetData()
-        data.reshape((self.batch_size*self.num_columns,))
+        data.reshape((self.batch_size * self.num_columns,))
 
         return_data = np.array(data).reshape(
             self.batch_size, self.num_columns)
@@ -215,7 +219,7 @@ class BaseGenerator:
         if self.target_given:
             target_data = return_data[:, self.target_index]
             return_data = np.column_stack(
-                (return_data[:, :self.target_index], return_data[:, self.target_index+1:]))
+                (return_data[:, :self.target_index], return_data[:, self.target_index + 1:]))
 
             # Splice weights column from the data if weight is given
             if self.weights_given:
@@ -224,7 +228,7 @@ class BaseGenerator:
 
                 weights_data = return_data[:, self.weights_index]
                 return_data = np.column_stack(
-                    (return_data[:, :self.weights_index], return_data[:, self.weights_index+1:]))
+                    (return_data[:, :self.weights_index], return_data[:, self.weights_index + 1:]))
                 return return_data, target_data, weights_data
 
             return return_data, target_data
@@ -243,7 +247,7 @@ class BaseGenerator:
         import torch
 
         data = batch.GetData()
-        data.reshape((self.batch_size*self.num_columns,))
+        data.reshape((self.batch_size * self.num_columns,))
 
         return_data = torch.Tensor(data).reshape(
             self.batch_size, self.num_columns)
@@ -252,7 +256,7 @@ class BaseGenerator:
         if self.target_given:
             target_data = return_data[:, self.target_index]
             return_data = torch.column_stack(
-                (return_data[:, :self.target_index], return_data[:, self.target_index+1:]))
+                (return_data[:, :self.target_index], return_data[:, self.target_index + 1:]))
 
             # Splice weights column from the data if weight is given
             if self.weights_given:
@@ -261,7 +265,7 @@ class BaseGenerator:
 
                 weights_data = return_data[:, self.weights_index]
                 return_data = torch.column_stack(
-                    (return_data[:, :self.weights_index], return_data[:, self.weights_index+1:]))
+                    (return_data[:, :self.weights_index], return_data[:, self.weights_index + 1:]))
                 return return_data, target_data, weights_data
 
             return return_data, target_data
@@ -295,7 +299,7 @@ class BaseGenerator:
 
         batch = self.generator.GetTrainBatch()
 
-        if (batch.GetSize() > 0):
+        if batch:
             return batch
 
         return None
@@ -309,7 +313,7 @@ class BaseGenerator:
 
         batch = self.generator.GetValidationBatch()
 
-        if (batch.GetSize() > 0):
+        if batch:
             return batch
 
         return None
@@ -336,6 +340,7 @@ class TrainRBatchGenerator:
     def DeActivate(self):
         """ Stop the loading of batches
         """
+
         self.base_generator.DeActivate()
 
     @property
@@ -368,10 +373,13 @@ class TrainRBatchGenerator:
         while (True):
             batch = self.base_generator.GetTrainBatch()
 
-            if batch is None:
+            if not batch:
                 break
 
             yield self.conversion_function(batch)
+
+        self.base_generator.DeActivate()
+        return None
 
 
 class ValidationRBatchGenerator:
@@ -413,12 +421,12 @@ class ValidationRBatchGenerator:
         Yields:
             Union[np.NDArray, torch.Tensor]: A batch of data
         """
-        self.base_generator.start_validation()
+        self.base_generator.StartValidation()
 
         while (True):
             batch = self.base_generator.GetValidationBatch()
 
-            if batch is None:
+            if not batch:
                 break
 
             yield self.conversion_function(batch)
@@ -455,7 +463,7 @@ def CreateBatchGenerators(tree_name: str, file_name: str, batch_size: int, chunk
             NOTE: the validation batches are loaded during the training. Before training, the validation generator 
             will return no batches. 
     """
-    base_generator = BaseGenerator(file_name, tree_name, chunk_size, batch_size, columns,
+    base_generator = BaseGenerator(tree_name, file_name, batch_size, chunk_size, columns,
                                    filters, max_vec_sizes, vec_padding, target, weights, validation_split, max_chunks, shuffle)
 
     train_generator = TrainRBatchGenerator(
@@ -499,7 +507,7 @@ def CreateTFDatasets(tree_name: str, file_name: str, batch_size: int, chunk_size
     """
     import tensorflow as tf
 
-    base_generator = BaseGenerator(file_name, tree_name, chunk_size, batch_size, columns, filters,
+    base_generator = BaseGenerator(tree_name, file_name, batch_size, chunk_size, columns, filters,
                                    max_vec_sizes, vec_padding, target, weights, validation_split, max_chunks, shuffle)
 
     train_generator = TrainRBatchGenerator(
@@ -516,12 +524,12 @@ def CreateTFDatasets(tree_name: str, file_name: str, batch_size: int, chunk_size
 
     # Target given, no weights given
     if (target != None and weights == None):
-        batch_signature = (tf.TensorSpec(shape=(batch_size, num_columns-1), dtype=tf.float32),
+        batch_signature = (tf.TensorSpec(shape=(batch_size, num_columns - 1), dtype=tf.float32),
                            tf.TensorSpec(shape=(batch_size,), dtype=tf.float32))
 
     # Target given, no weights given
     if (target != None and weights != None):
-        batch_signature = (tf.TensorSpec(shape=(batch_size, num_columns-2), dtype=tf.float32),
+        batch_signature = (tf.TensorSpec(shape=(batch_size, num_columns - 2), dtype=tf.float32),
                            tf.TensorSpec(shape=(batch_size,),
                                          dtype=tf.float32),
                            tf.TensorSpec(shape=(batch_size,), dtype=tf.float32))
@@ -566,7 +574,7 @@ def CreatePyTorchDataLoaders(tree_name: str, file_name: str, batch_size: int, ch
             NOTE: the validation batches are loaded during the training. Before training, the validation generator 
             will return no batches. 
     """
-    base_generator = BaseGenerator(file_name, tree_name, chunk_size, batch_size, columns, filters,
+    base_generator = BaseGenerator(tree_name, file_name, batch_size, chunk_size, columns, filters,
                                    max_vec_sizes, vec_padding, target, weights, validation_split, max_chunks, shuffle)
 
     train_generator = TrainRBatchGenerator(

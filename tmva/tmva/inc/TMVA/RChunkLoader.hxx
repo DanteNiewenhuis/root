@@ -87,7 +87,6 @@ public:
                 std::vector<size_t> maxVecSizes = std::vector<size_t>(), float vecPadding = 0.0)
       : fChunkTensor(chunkTensor), fMaxVecSizes(maxVecSizes), fVecPadding(vecPadding)
    {
-      std::cout << "Chunk Loader vec padding: " << fVecPadding << std::endl;
    }
 
    void operator()(First first, Rest... rest)
