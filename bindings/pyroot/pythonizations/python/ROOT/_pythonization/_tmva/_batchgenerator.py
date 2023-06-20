@@ -10,7 +10,8 @@ if TYPE_CHECKING:
 
 class BaseGenerator:
 
-    def get_template(self, tree_name: str, file_name: str, columns: list[str] = None, max_vec_sizes: dict[str, int] = dict()) -> str:
+    def get_template(self, tree_name: str, file_name: str, columns: list[str] = None,
+                     max_vec_sizes: dict[str, int] = dict()) -> Tuple[str, list[int]]:
         """Generate a template for the RBatchGenerator based on the given RDataFrame and columns.
 
         Args:
@@ -112,11 +113,11 @@ class BaseGenerator:
                 f"The validation_split has to be in range [0.0, 1.0] \n given value is {validation_split}")
 
         # convert None types to lists for cppyy
-        if (max_vec_sizes == None):
+        if (max_vec_sizes is None):
             max_vec_sizes = dict()
-        if (columns == None):
+        if (columns is None):
             columns = []
-        if (filters == None):
+        if (filters is None):
             filters = []
 
         # main_folder = "../"
@@ -170,17 +171,17 @@ class BaseGenerator:
         self.generator.Activate()
 
     def __del__(self):
-        print(f"DELETE base generator")
         self.DeActivate()
 
     def DeActivate(self):
         """Initialize the generator to be used for a loop
         """
-        self.generator.DeActivate()
+        if self.generator:
+            self.generator.DeActivate()
 
     def GetSample(self):
         """ Return a sample of data that has the same size and types as the actual result.
-            This sample can be used to define the shape and size of the output 
+            This sample can be used to define the shape and size of the output
 
         Returns:
             np.ndarray: data sample
@@ -286,7 +287,7 @@ class BaseGenerator:
         Returns:
             np.ndarray: converted batch
         """
-        import tensorflow as tf
+        # import tensorflow as tf
 
         batch = self.ConvertBatchToNumpy(batch)
 
@@ -447,25 +448,25 @@ def CreateBatchGenerators(tree_name: str, file_name: str, batch_size: int, chunk
         tree_name (str): Name of the tree in the ROOT file
         file_name (str): Path to the ROOT file
         batch_size (int): Size of the returned chunks.
-        chunk_size (int): The size of the chunks loaded from the ROOT file. 
+        chunk_size (int): The size of the chunks loaded from the ROOT file.
                           Higher chunk size results in better randomization, but higher memory usage
         columns (list[str], optional): Columns to be returned. If not given, all columns are used.
         filters (list[str], optional): Filters to apply during loading. If not given, no filters are applied.
-        max_vec_sizes (list[int], optional): Size of each column that consists of vectors. 
-                                         Required when using vector based columns 
+        max_vec_sizes (list[int], optional): Size of each column that consists of vectors.
+                                         Required when using vector based columns
         target (str, optional): Column that is used as target.
         weights (str, optional): Column used to weight events. Can only be used when a target is given
-        validation_split (float, optional): The ratio of batches being kept for validation. 
+        validation_split (float, optional): The ratio of batches being kept for validation.
                                             Value has to be between 0 and 1. Defaults to 0.0.
         max_chunks (int, optional): The number of chunks that should be loaded for an epoch.
                                     If not given, the whole file is used
         shuffle (bool): Batches consist of random events and are shuffled every epoch. Defaults to True
 
     Returns:
-        Tuple[TrainRBatchGenerator, ValidationRBatchGenerator]: 
-            Two generators are returned. One used to load training batches, and one to load validation batches. 
-            NOTE: the validation batches are loaded during the training. Before training, the validation generator 
-            will return no batches. 
+        Tuple[TrainRBatchGenerator, ValidationRBatchGenerator]:
+            Two generators are returned. One used to load training batches, and one to load validation batches.
+            NOTE: the validation batches are loaded during the training. Before training, the validation generator
+            will return no batches.
     """
     base_generator = BaseGenerator(tree_name, file_name, batch_size, chunk_size, columns,
                                    filters, max_vec_sizes, vec_padding, target, weights, validation_split, max_chunks, shuffle)
@@ -489,25 +490,25 @@ def CreateTFDatasets(tree_name: str, file_name: str, batch_size: int, chunk_size
         tree_name (str): Name of the tree in the ROOT file
         file_name (str): Path to the ROOT file
         batch_size (int): Size of the returned chunks.
-        chunk_size (int): The size of the chunks loaded from the ROOT file. 
+        chunk_size (int): The size of the chunks loaded from the ROOT file.
                           Higher chunk size results in better randomization, but higher memory usage
         columns (list[str], optional): Columns to be returned. If not given, all columns are used.
         filters (list[str], optional): Filters to apply during loading. If not given, no filters are applied.
-        max_vec_sizes (list[int], optional): Size of each column that consists of vectors. 
-                                         Required when using vector based columns 
+        max_vec_sizes (list[int], optional): Size of each column that consists of vectors.
+                                         Required when using vector based columns
         target (str, optional): Column that is used as target.
         weights (str, optional): Column used to weight events. Can only be used when a target is given
-        validation_split (float, optional): The ratio of batches being kept for validation. 
+        validation_split (float, optional): The ratio of batches being kept for validation.
                                             Value has to be between 0 and 1. Defaults to 0.0.
         max_chunks (int, optional): The number of chunks that should be loaded for an epoch.
                                     If not given, the whole file is used
         shuffle (bool): Batches consist of random events and are shuffled every epoch. Defaults to True
 
     Returns:
-        Tuple[TrainRBatchGenerator, ValidationRBatchGenerator]: 
-            Two generators are returned. One used to load training batches, and one to load validation batches. 
-            NOTE: the validation batches are loaded during the training. Before training, the validation generator 
-            will return no batches. 
+        Tuple[TrainRBatchGenerator, ValidationRBatchGenerator]:
+            Two generators are returned. One used to load training batches, and one to load validation batches.
+            NOTE: the validation batches are loaded during the training. Before training, the validation generator
+            will return no batches.
     """
     import tensorflow as tf
 
@@ -522,17 +523,17 @@ def CreateTFDatasets(tree_name: str, file_name: str, batch_size: int, chunk_size
     num_columns = len(train_generator.columns)
 
     # No target and weights given
-    if (target == None):
+    if (target is None):
         batch_signature = (tf.TensorSpec(
             shape=(batch_size, num_columns), dtype=tf.float32))
 
     # Target given, no weights given
-    if (target != None and weights == None):
+    elif weights is None:
         batch_signature = (tf.TensorSpec(shape=(batch_size, num_columns - 1), dtype=tf.float32),
                            tf.TensorSpec(shape=(batch_size,), dtype=tf.float32))
 
-    # Target given, no weights given
-    if (target != None and weights != None):
+    # Target and weights given
+    else:
         batch_signature = (tf.TensorSpec(shape=(batch_size, num_columns - 2), dtype=tf.float32),
                            tf.TensorSpec(shape=(batch_size,),
                                          dtype=tf.float32),
@@ -558,25 +559,25 @@ def CreatePyTorchDataLoaders(tree_name: str, file_name: str, batch_size: int, ch
         tree_name (str): Name of the tree in the ROOT file
         file_name (str): Path to the ROOT file
         batch_size (int): Size of the returned chunks.
-        chunk_size (int): The size of the chunks loaded from the ROOT file. 
+        chunk_size (int): The size of the chunks loaded from the ROOT file.
                           Higher chunk size results in better randomization, but higher memory usage
         columns (list[str], optional): Columns to be returned. If not given, all columns are used.
         filters (list[str], optional): Filters to apply during loading. If not given, no filters are applied.
-        max_vec_sizes (list[int], optional): Size of each column that consists of vectors. 
-                                         Required when using vector based columns 
+        max_vec_sizes (list[int], optional): Size of each column that consists of vectors.
+                                         Required when using vector based columns.
         target (str, optional): Column that is used as target.
         weights (str, optional): Column used to weight events. Can only be used when a target is given
-        validation_split (float, optional): The ratio of batches being kept for validation. 
+        validation_split (float, optional): The ratio of batches being kept for validation.
                                             Value has to be between 0 and 1. Defaults to 0.0.
         max_chunks (int, optional): The number of chunks that should be loaded for an epoch.
                                     If not given, the whole file is used
         shuffle (bool): Batches consist of random events and are shuffled every epoch. Defaults to True
 
     Returns:
-        Tuple[TrainRBatchGenerator, ValidationRBatchGenerator]: 
-            Two generators are returned. One used to load training batches, and one to load validation batches. 
-            NOTE: the validation batches are loaded during the training. Before training, the validation generator 
-            will return no batches. 
+        Tuple[TrainRBatchGenerator, ValidationRBatchGenerator]:
+            Two generators are returned. One used to load training batches, and one to load validation batches.
+            NOTE: the validation batches are loaded during the training. Before training, the validation generator
+            will return no batches.
     """
     base_generator = BaseGenerator(tree_name, file_name, batch_size, chunk_size, columns, filters,
                                    max_vec_sizes, vec_padding, target, weights, validation_split, max_chunks, shuffle)

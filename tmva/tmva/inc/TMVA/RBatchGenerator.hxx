@@ -41,7 +41,7 @@ private:
    std::vector<std::vector<size_t>> fTrainingIdxs;
    std::vector<std::vector<size_t>> fValidationIdxs;
 
-   bool fShuffle = true, fActivated;
+   bool fShuffle = true, fActivated = false;
 
    std::vector<size_t> fVecSizes;
    float fVecPadding;
@@ -203,7 +203,9 @@ public:
 
    void Activate()
    {
-      DeActivate();
+      if (fActivated) {
+         DeActivate();
+      }
 
       fCurrentRow = 0;
       fActivated = true;
