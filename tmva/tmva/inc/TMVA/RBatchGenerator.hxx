@@ -109,8 +109,6 @@ private:
          passed_events = myCount.GetValue();
       }
 
-      // std::cout << "RBatchGenerator::Init => tensor: " << fChunkTensor << std::endl;
-
       fCurrentRow += processed_events;
 
       // Create batches for the current_chunk.
@@ -171,8 +169,6 @@ public:
       }
 
       fMaxBatches = ceil((fChunkSize / fBatchSize) * (1 - fValidationSplit));
-
-      std::cout << "RBatchGenerator => fMaxBatches: " << fMaxBatches << std::endl;
 
       // get the number of fNumEntries in the dataframe
       TFile *f = TFile::Open(fFileName.c_str());

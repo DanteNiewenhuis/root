@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 class BaseGenerator:
 
-    def get_template(self, tree_name: str, file_name: str, columns: list[str] = None,
+    def get_template(self, tree_name: str, file_name: str, columns: list[str] = list(),
                      max_vec_sizes: dict[str, int] = dict()) -> Tuple[str, list[int]]:
         """Generate a template for the RBatchGenerator based on the given RDataFrame and columns.
 
@@ -66,9 +66,9 @@ class BaseGenerator:
 
         return template_string[:-1], max_vec_sizes_list
 
-    def __init__(self, tree_name: str, file_name: str, batch_size: int, chunk_size: int, columns: list[str] = None,
-                 filters: list[str] = None, max_vec_sizes: dict[str, int] = None, vec_padding: int = 0, target: str = None,
-                 weights: str = None, validation_split: float = 0.0, max_chunks: int = 0, shuffle: bool = True):
+    def __init__(self, tree_name: str, file_name: str, batch_size: int, chunk_size: int, columns: list[str] = list(),
+                 filters: list[str] = list(), max_vec_sizes: dict[str, int] = dict(), vec_padding: int = 0, target: str = "",
+                 weights: str = "", validation_split: float = 0.0, max_chunks: int = 0, shuffle: bool = True):
         """ Wrapper around the Cpp RBatchGenerator
 
         Args:
@@ -81,7 +81,7 @@ class BaseGenerator:
             filters (list[str], optional): Filters to apply during loading. If not given, no filters are applied.
             max_vec_sizes (dict[std, int], optional): Size of each column that consists of vectors.
                                             Required when using vector based columns.
-            vec_padding (int): Value to pad vectors with if the vector is smaller than the given max vector length. 
+            vec_padding (int): Value to pad vectors with if the vector is smaller than the given max vector length.
                                             Defaults is 0
             target (str, optional): Column that is used as target.
             weights (str, optional): Column used to weight events. Can only be used when a target is given.
@@ -112,15 +112,6 @@ class BaseGenerator:
             raise ValueError(
                 f"The validation_split has to be in range [0.0, 1.0] \n given value is {validation_split}")
 
-        # convert None types to lists for cppyy
-        if (max_vec_sizes is None):
-            max_vec_sizes = dict()
-        if (columns is None):
-            columns = []
-        if (filters is None):
-            filters = []
-
-        # main_folder = "../"
         # TODO: better linking when importing into ROOT
         # ROOT.gInterpreter.ProcessLine(
         #     f'#include "{main_folder}Cpp_files/RBatchGenerator.cpp"')
@@ -132,7 +123,7 @@ class BaseGenerator:
         self.batch_size = batch_size
 
         # Handle target
-        self.target_given = target is not None
+        self.target_given = len(target) > 0
         if self.target_given:
             if target in self.output_columns:
                 self.target_index = self.output_columns.index(target)
@@ -141,7 +132,7 @@ class BaseGenerator:
                     f"Provided target not in given columns: \ntarget => {target}\ncolumns => {self.output_columns}")
 
         # Handle weights
-        self.weights_given = weights is not None
+        self.weights_given = len(weights) > 0
         if self.weights_given and not self.target_given:
             raise ValueError(
                 "Weights can only be used when a target is provided")
@@ -176,8 +167,7 @@ class BaseGenerator:
     def DeActivate(self):
         """Initialize the generator to be used for a loop
         """
-        if self.generator:
-            self.generator.DeActivate()
+        self.generator.DeActivate()
 
     def GetSample(self):
         """ Return a sample of data that has the same size and types as the actual result.
@@ -331,7 +321,7 @@ class TrainRBatchGenerator:
 
         Args:
             base_generator (BaseGenerator): The base connection to the Cpp code
-            conversion_function (Callable[RTensor, Union[np.NDArray, torch.Tensor]]): 
+            conversion_function (Callable[RTensor, Union[np.NDArray, torch.Tensor]]):
                 Function that converts a given RTensor into a batch usable by Python
         """
         self.base_generator = base_generator
@@ -395,7 +385,7 @@ class ValidationRBatchGenerator:
 
         Args:
             base_generator (BaseGenerator): The base connection to the Cpp code
-            conversion_function (Callable[RTensor, Union[np.NDArray, torch.Tensor]]): 
+            conversion_function (Callable[RTensor, Union[np.NDArray, torch.Tensor]]):
                 Function that converts a given RTensor into a batch usable by Python
         """
         self.base_generator = base_generator
@@ -437,9 +427,9 @@ class ValidationRBatchGenerator:
             yield self.conversion_function(batch)
 
 
-def CreateBatchGenerators(tree_name: str, file_name: str, batch_size: int, chunk_size: int, columns: list[str] = None,
-                          filters: list[str] = None, max_vec_sizes: dict[str, int] = None, vec_padding: int = 0,
-                          target: str = None, weights: str = None, validation_split: float = 0.0, max_chunks: int = 0,
+def CreateBatchGenerators(tree_name: str, file_name: str, batch_size: int, chunk_size: int, columns: list[str] = list(),
+                          filters: list[str] = list(), max_vec_sizes: dict[str, int] = dict(), vec_padding: int = 0,
+                          target: str = "", weights: str = "", validation_split: float = 0.0, max_chunks: int = 0,
                           shuffle: bool = True) -> Tuple[TrainRBatchGenerator, ValidationRBatchGenerator]:
     """ Return two batch generators based on the given ROOT file and tree.
         The first generator returns training batches, while the second generator returns validation batches
@@ -479,9 +469,9 @@ def CreateBatchGenerators(tree_name: str, file_name: str, batch_size: int, chunk
     return train_generator, validation_generator
 
 
-def CreateTFDatasets(tree_name: str, file_name: str, batch_size: int, chunk_size: int, columns: list[str] = None,
-                     filters: list[str] = None, max_vec_sizes: dict[str, int] = None, vec_padding: int = 0,
-                     target: str = None, weights: str = None, validation_split: float = 0.0, max_chunks: int = 0,
+def CreateTFDatasets(tree_name: str, file_name: str, batch_size: int, chunk_size: int, columns: list[str] = list(),
+                     filters: list[str] = list(), max_vec_sizes: dict[str, int] = dict(), vec_padding: int = 0,
+                     target: str = "", weights: str = "", validation_split: float = 0.0, max_chunks: int = 0,
                      shuffle: bool = True) -> Tuple[tf.data.Dataset, tf.data.Dataset]:
     """ Return two Tensorflow Datasets based on the given ROOT file and tree.
         The first dataset returns training batches, while the second dataset returns validation batches
@@ -548,9 +538,9 @@ def CreateTFDatasets(tree_name: str, file_name: str, batch_size: int, chunk_size
     return ds_train, ds_validation
 
 
-def CreatePyTorchDataLoaders(tree_name: str, file_name: str, batch_size: int, chunk_size: int, columns: list[str] = None,
-                             filters: list[str] = None, max_vec_sizes: dict[str, int] = None, vec_padding: int = 0,
-                             target: str = None, weights: str = None, validation_split: float = 0.0, max_chunks: int = 0,
+def CreatePyTorchDataLoaders(tree_name: str, file_name: str, batch_size: int, chunk_size: int, columns: list[str] = list(),
+                             filters: list[str] = list(), max_vec_sizes: dict[str, int] = dict(), vec_padding: int = 0,
+                             target: str = "", weights: str = "", validation_split: float = 0.0, max_chunks: int = 0,
                              shuffle: bool = True) -> Tuple[TrainRBatchGenerator, ValidationRBatchGenerator]:
     """ Return two batch generators based on the given ROOT file and tree.
         The first generator returns training batches, while the second generator returns validation batches

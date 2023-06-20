@@ -42,11 +42,7 @@ public:
       fRng = TMVA::RandomGenerator<TRandom3>(0);
    }
 
-   ~RBatchLoader()
-   {
-      std::cout << "Cpp::RBatchLoader => Deconstructor" << std::endl;
-      DeActivate();
-   }
+   ~RBatchLoader() { DeActivate(); }
 
 public:
    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -89,7 +85,6 @@ public:
    // Activate the threads again to accept new tasks
    void Activate()
    {
-      std::cout << "Cpp::RBatchLoader => Activate" << std::endl;
       accept_tasks = true;
       fBatchCondition.notify_all();
    }
@@ -97,7 +92,6 @@ public:
    // Wait untill all tasks are handled, then join the threads
    void DeActivate()
    {
-      std::cout << "RBatchLoader => DeActivate" << std::endl;
       accept_tasks = false;
       fBatchCondition.notify_all();
    }
