@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import ROOT
+
 ROOT.EnableThreadSafety()
 
 tree_name = "tree_name"
@@ -14,7 +15,13 @@ target = "target_name"
 num_columns = 0  # set number of columns
 
 gen_train, gen_validation = ROOT.TMVA.Experimental.CreatePyTorchDataLoaders(
-    tree_name, file_name, batch_size, chunk_size, target=target, validation_split=0.3)
+    tree_name,
+    file_name,
+    batch_size,
+    chunk_size,
+    target=target,
+    validation_split=0.3,
+)
 
 
 def calc_accuracy(targets, pred):
@@ -30,9 +37,9 @@ model = torch.nn.Sequential(
     torch.nn.Linear(300, 300),
     torch.nn.Tanh(),
     torch.nn.Linear(300, 1),
-    torch.nn.Sigmoid()
+    torch.nn.Sigmoid(),
 )
-loss_fn = torch.nn.MSELoss(reduction='mean')
+loss_fn = torch.nn.MSELoss(reduction="mean")
 optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
 
 
