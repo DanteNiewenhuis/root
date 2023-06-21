@@ -20,20 +20,29 @@ from .. import pythonization
 from ._factory import Factory
 from ._dataloader import DataLoader
 from ._crossvalidation import CrossValidation
-from ._batchgenerator import CreateBatchGenerators, CreateTFDatasets, CreatePyTorchDataLoaders
+from ._batchgenerator import (
+    CreateBatchGenerators,
+    CreateTFDatasets,
+    CreatePyTorchGenerators,
+)
 
 from ._rbdt import Compute, pythonize_rbdt
 
 python_tmva_functions = [
     CreateBatchGenerators,
     CreateTFDatasets,
-    CreatePyTorchDataLoaders
+    CreatePyTorchGenerators,
 ]
 
 
 hasRDF = gSystem.GetFromPipe("root-config --has-dataframe") == "yes"
 if hasRDF:
-    from ._rtensor import get_array_interface, add_array_interface_property, RTensorGetitem, pythonize_rtensor
+    from ._rtensor import (
+        get_array_interface,
+        add_array_interface_property,
+        RTensorGetitem,
+        pythonize_rtensor,
+    )
 
 # this should be available only when xgboost is there ?
 # We probably don't need a protection here since the code is run only when there is xgboost
@@ -54,11 +63,18 @@ def get_defined_attributes(klass, consider_base_classes=False):
     any of its base classes (except for `object`).
     """
 
-    blacklist = ["__dict__", "__doc__",
-                 "__hash__", "__module__", "__weakref__"]
+    blacklist = [
+        "__dict__",
+        "__doc__",
+        "__hash__",
+        "__module__",
+        "__weakref__",
+    ]
 
     if not consider_base_classes:
-        return sorted([attr for attr in klass.__dict__.keys() if attr not in blacklist])
+        return sorted(
+            [attr for attr in klass.__dict__.keys() if attr not in blacklist]
+        )
 
     # get a list of this class and all its base classes, excluding `object`
     method_resolution_order = klass.mro()
@@ -66,7 +82,6 @@ def get_defined_attributes(klass, consider_base_classes=False):
         method_resolution_order.remove(object)
 
     def is_defined(funcname):
-
         if funcname in blacklist:
             return False
 
@@ -132,7 +147,9 @@ def make_func_name_orig(func_name):
     return "_" + func_name
 
 
-@pythonization(class_name=["Factory", "DataLoader", "CrossValidation"], ns="TMVA")
+@pythonization(
+    class_name=["Factory", "DataLoader", "CrossValidation"], ns="TMVA"
+)
 def pythonize_tmva(klass, name):
     # Parameters:
     # klass: class to pythonize
@@ -140,7 +157,7 @@ def pythonize_tmva(klass, name):
 
     # need to strip the TMVA namespace
     ns_prefix = "TMVA::"
-    name = name[len(ns_prefix): len(name)]
+    name = name[len(ns_prefix) : len(name)]
 
     if not name in python_classes_dict:
         print("Error - class ", name, "is not in the pythonization list")
@@ -153,7 +170,6 @@ def pythonize_tmva(klass, name):
     func_names = get_defined_attributes(python_klass)
 
     for func_name in func_names:
-
         # if the TMVA class already has a function with the same name as our
         # pythonization, we rename it and prefix it with an underscore
         if hasattr(klass, func_name):
@@ -175,8 +191,12 @@ def pythonize_tmva(klass, name):
                 func_new.__doc__ = "Pythonization info\n"
                 func_new.__doc__ += "==============\n\n"
                 func_new.__doc__ += inspect.cleandoc(python_docstring) + "\n\n"
-                func_new.__doc__ += "Documentation of original cppyy.CPPOverload object\n"
-                func_new.__doc__ += "==================================================\n\n"
+                func_new.__doc__ += (
+                    "Documentation of original cppyy.CPPOverload object\n"
+                )
+                func_new.__doc__ += (
+                    "==================================================\n\n"
+                )
                 func_new.__doc__ += func_orig.__doc__
 
             setattr(klass, func_name_orig, func_orig)
@@ -187,7 +207,6 @@ def pythonize_tmva(klass, name):
 
 
 def pythonize_tmva_namespace(ns):
-
     for python_func in python_tmva_functions:
         func_name = python_func.__name__
 

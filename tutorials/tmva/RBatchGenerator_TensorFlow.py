@@ -11,27 +11,27 @@ chunk_size = 1_000_000
 
 target = "target"
 
-num_columns = 0  # set number of columns
-
 ds_train, ds_valid = ROOT.TMVA.Experimental.CreateTFDatasets(
     tree_name,
     file_name,
     batch_size,
     chunk_size,
     validation_split=0.3,
-    target="Type",
+    target=target,
 )
 
+input_columns = ds_train.train_columns
+num_features = len(input_columns)
 
-###################################################################################################
+##############################################################################
 # AI example
-###################################################################################################
+##############################################################################
 
 # Define TensorFlow model
 model = tf.keras.Sequential(
     [
         tf.keras.layers.Dense(
-            300, activation=tf.nn.tanh, input_shape=(num_columns - 1,)
+            300, activation=tf.nn.tanh, input_shape=(num_features,)
         ),  # input shape required
         tf.keras.layers.Dense(300, activation=tf.nn.tanh),
         tf.keras.layers.Dense(300, activation=tf.nn.tanh),

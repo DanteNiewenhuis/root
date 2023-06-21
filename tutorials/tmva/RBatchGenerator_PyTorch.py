@@ -12,9 +12,7 @@ batch_size = 1024
 
 target = "target_name"
 
-num_columns = 0  # set number of columns
-
-gen_train, gen_validation = ROOT.TMVA.Experimental.CreatePyTorchDataLoaders(
+gen_train, gen_validation = ROOT.TMVA.Experimental.CreatePyTorchGenerators(
     tree_name,
     file_name,
     batch_size,
@@ -23,6 +21,9 @@ gen_train, gen_validation = ROOT.TMVA.Experimental.CreatePyTorchDataLoaders(
     validation_split=0.3,
 )
 
+input_columns = gen_train.train_columns
+num_features = len(input_columns)
+
 
 def calc_accuracy(targets, pred):
     return torch.sum(targets == pred.round()) / pred.size(0)
@@ -30,7 +31,7 @@ def calc_accuracy(targets, pred):
 
 # Initialize PyTorch model
 model = torch.nn.Sequential(
-    torch.nn.Linear(num_columns - 1, 300),
+    torch.nn.Linear(num_features, 300),
     torch.nn.Tanh(),
     torch.nn.Linear(300, 300),
     torch.nn.Tanh(),
