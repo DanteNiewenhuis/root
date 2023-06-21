@@ -4,7 +4,7 @@ import ROOT
 ROOT.EnableThreadSafety()
 
 tree_name = "tree_name"
-file_name = f"path_to_file"
+file_name = "path_to_file"
 
 chunk_size = 100_000
 batch_size = 1024
@@ -52,7 +52,7 @@ for i, (x_train, y_train) in enumerate(gen_train):
 
     print(f"Training => {accuracy = }")
 
-print(f"Start Validation")
+print("Start Validation")
 
 # Evaluate the model on the validation set
 for i, (x_train, y_train) in enumerate(gen_validation):

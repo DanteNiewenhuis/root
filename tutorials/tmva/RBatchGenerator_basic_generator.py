@@ -17,6 +17,6 @@ for i, b in enumerate(ds_train):
     print(f"Training batch {i} => {len(b) = }")
 
 # Loop through Validation set
-print(f"Starting Validation")
+print("Starting Validation")
 for i, b in enumerate(ds_validation):
     print(f"Validation batch {i} => {len(b) = }")

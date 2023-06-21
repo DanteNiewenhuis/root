@@ -3,7 +3,7 @@ import ROOT
 ROOT.EnableThreadSafety()
 
 tree_name = "tree_name"
-file_name = f"path_to_file"
+file_name = "path_to_file"
 
 batch_size = 1024
 chunk_size = 1_000_000
