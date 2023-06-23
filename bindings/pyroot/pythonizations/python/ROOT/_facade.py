@@ -11,6 +11,7 @@ from libROOTPythonizations import gROOT, CreateBufferFromAddress
 from cppyy.gbl import gSystem
 
 from ._application import PyROOTApplication
+
 _numba_pyversion = (2, 7, 5)
 if sys.version_info[:3] > _numba_pyversion:
     # Python <= 2.7.5 cannot use exec in an inner function
@@ -31,18 +32,21 @@ class PyROOTConfiguration(object):
 
 class _gROOTWrapper(object):
     """Internal class to manage lookups of gROOT in the facade.
-       This wrapper calls _finalSetup on the facade when it
-       receives a lookup, unless the lookup is for SetBatch.
-       This allows to evaluate the command line parameters
-       before checking if batch mode is on in _finalSetup
+    This wrapper calls _finalSetup on the facade when it
+    receives a lookup, unless the lookup is for SetBatch.
+    This allows to evaluate the command line parameters
+    before checking if batch mode is on in _finalSetup
     """
 
     def __init__(self, facade):
-        self.__dict__['_facade'] = facade
-        self.__dict__['_gROOT'] = gROOT
+        self.__dict__["_facade"] = facade
+        self.__dict__["_gROOT"] = gROOT
 
-    def __getattr__( self, name ):
-        if name != 'SetBatch' and self._facade.__dict__['gROOT'] != self._gROOT:
+    def __getattr__(self, name):
+        if (
+            name != "SetBatch"
+            and self._facade.__dict__["gROOT"] != self._gROOT
+        ):
             self._facade._finalSetup()
         return getattr(self._gROOT, name)
 
@@ -63,6 +67,7 @@ def _create_rdf_experimental_distributed_module(parent):
         types.ModuleType: The ROOT.RDF.Experimental.Distributed submodule.
     """
     import DistRDF
+
     return DistRDF.create_distributed_module(parent)
 
 
@@ -86,7 +91,7 @@ class ROOTFacade(types.ModuleType):
         # Importing all will be customised later
         self.module.__all__ = []
 
-        self.__doc__  = module.__doc__
+        self.__doc__ = module.__doc__
         self.__name__ = module.__name__
         self.__file__ = module.__file__
 
@@ -94,9 +99,16 @@ class ROOTFacade(types.ModuleType):
         self.gROOT = _gROOTWrapper(self)
 
         # Expose some functionality from CPyCppyy extension module
-        self._cppyy_exports = [ 'nullptr', 'bind_object', 'as_cobject', 'addressof',
-                                'SetMemoryPolicy', 'kMemoryHeuristics', 'kMemoryStrict',
-                                'SetOwnership' ]
+        self._cppyy_exports = [
+            "nullptr",
+            "bind_object",
+            "as_cobject",
+            "addressof",
+            "SetMemoryPolicy",
+            "kMemoryHeuristics",
+            "kMemoryStrict",
+            "SetOwnership",
+        ]
         for name in self._cppyy_exports:
             setattr(self, name, getattr(cppyy_backend, name))
         # For backwards compatibility
@@ -129,7 +141,7 @@ class ROOTFacade(types.ModuleType):
         # address of the object
 
         # addr is the address of the address of the object
-        addr = self.addressof(instance = obj, byref = True)
+        addr = self.addressof(instance=obj, byref=True)
 
         # Create a buffer (LowLevelView) from address
         return CreateBufferFromAddress(addr)
@@ -145,13 +157,15 @@ class ROOTFacade(types.ModuleType):
         except ImportError:
             import builtins as __builtin__  # name change in p3
         _orig_ihook = __builtin__.__import__
+
         def _importhook(name, *args, **kwds):
-            if name[0:5] == 'ROOT.':
+            if name[0:5] == "ROOT.":
                 try:
                     sys.modules[name] = getattr(self, name[5:])
                 except Exception:
                     pass
             return _orig_ihook(name, *args, **kwds)
+
         __builtin__.__import__ = _importhook
 
     def _handle_import_all(self):
@@ -161,10 +175,10 @@ class ROOTFacade(types.ModuleType):
 
         # Get caller module (jump over the facade frames)
         num_frame = 2
-        frame = sys._getframe(num_frame).f_globals['__name__']
-        while frame == 'ROOT._facade':
+        frame = sys._getframe(num_frame).f_globals["__name__"]
+        while frame == "ROOT._facade":
             num_frame += 1
-            frame = sys._getframe(num_frame).f_globals['__name__']
+            frame = sys._getframe(num_frame).f_globals["__name__"]
         caller = sys.modules[frame]
 
         # Install the hook
@@ -179,7 +193,7 @@ class ROOTFacade(types.ModuleType):
         # The first two attempts allow to lookup
         # e.g. ROOT.ROOT.Math as ROOT.Math
 
-        if name == '__all__':
+        if name == "__all__":
             self._handle_import_all()
             # Make the attributes of the facade be injected in the
             # caller module
@@ -193,14 +207,18 @@ class ROOTFacade(types.ModuleType):
             res = gROOT.FindObject(name)
             if res:
                 return res
-        raise AttributeError("Failed to get attribute {} from ROOT".format(name))
+        raise AttributeError(
+            "Failed to get attribute {} from ROOT".format(name)
+        )
 
     def _finalSetup(self):
         # Prevent this method from being re-entered through the gROOT wrapper
-        self.__dict__['gROOT'] = gROOT
+        self.__dict__["gROOT"] = gROOT
 
         # Setup interactive usage from Python
-        self.__dict__['app'] = PyROOTApplication(self.PyConfig, self._is_ipython)
+        self.__dict__["app"] = PyROOTApplication(
+            self.PyConfig, self._is_ipython
+        )
         if not self.gROOT.IsBatch() and self.PyConfig.StartGUIThread:
             self.app.init_graphics()
 
@@ -211,14 +229,16 @@ class ROOTFacade(types.ModuleType):
 
         # Redirect lookups to cppyy's global namespace
         self.__class__.__getattr__ = self._fallback_getattr
-        self.__class__.__setattr__ = lambda self, name, val: setattr(gbl_namespace, name, val)
+        self.__class__.__setattr__ = lambda self, name, val: setattr(
+            gbl_namespace, name, val
+        )
 
         # Run rootlogon if exists
         self._run_rootlogon()
 
     def _getattr(self, name):
         # Special case, to allow "from ROOT import gROOT" w/o starting the graphics
-        if name == '__path__':
+        if name == "__path__":
             raise AttributeError(name)
 
         self._finalSetup()
@@ -233,25 +253,35 @@ class ROOTFacade(types.ModuleType):
     def _execute_rootlogon_module(self, file_path):
         """Execute the 'rootlogon.py' module found at the given 'file_path'"""
         # Could also have used execfile, but import is likely to give fewer surprises
-        module_name = 'rootlogon'
+        module_name = "rootlogon"
         if sys.version_info >= (3, 5):
             import importlib.util
-            spec = importlib.util.spec_from_file_location(module_name, file_path)
+
+            spec = importlib.util.spec_from_file_location(
+                module_name, file_path
+            )
             module = importlib.util.module_from_spec(spec)
             sys.modules[module_name] = module
             spec.loader.exec_module(module)
         else:
             import imp
-            imp.load_module(module_name, open(file_path, 'r'), file_path, ('.py', 'r', 1))
+
+            imp.load_module(
+                module_name, open(file_path, "r"), file_path, (".py", "r", 1)
+            )
             del imp
 
     def _run_rootlogon(self):
         # Run custom logon file (must be after creation of ROOT globals)
-        hasargv = hasattr(sys, 'argv')
+        hasargv = hasattr(sys, "argv")
         # -n disables the reading of the logon file, just like with root
-        if hasargv and not '-n' in sys.argv and not self.PyConfig.DisableRootLogon:
-            file_path_home = os.path.expanduser('~/.rootlogon.py')
-            file_path_local = os.path.join(os.getcwd(), '.rootlogon.py')
+        if (
+            hasargv
+            and not "-n" in sys.argv
+            and not self.PyConfig.DisableRootLogon
+        ):
+            file_path_home = os.path.expanduser("~/.rootlogon.py")
+            file_path_local = os.path.join(os.getcwd(), ".rootlogon.py")
             if os.path.exists(file_path_home):
                 self._execute_rootlogon_module(file_path_home)
             elif os.path.exists(file_path_local):
@@ -260,10 +290,10 @@ class ROOTFacade(types.ModuleType):
                 # If the .py version of rootlogon exists, the .C is ignored (the user can
                 # load the .C from the .py, if so desired).
                 # System logon, user logon, and local logon (skip Rint.Logon)
-                name = '.rootlogon.C'
+                name = ".rootlogon.C"
                 logons = [
-                    os.path.join(str(self.TROOT.GetEtcDir()), 'system' + name),
-                    os.path.expanduser(os.path.join('~', name))
+                    os.path.join(str(self.TROOT.GetEtcDir()), "system" + name),
+                    os.path.expanduser(os.path.join("~", name)),
                 ]
                 if logons[-1] != os.path.join(os.getcwd(), name):
                     logons.append(name)
@@ -311,38 +341,49 @@ class ROOTFacade(types.ModuleType):
     # namespace lazily.
     @property
     def VecOps(self):
-        ns = self._fallback_getattr('VecOps')
+        ns = self._fallback_getattr("VecOps")
         try:
             from libROOTPythonizations import AsRVec
+
             ns.AsRVec = AsRVec
         except:
-            raise Exception('Failed to pythonize the namespace VecOps')
+            raise Exception("Failed to pythonize the namespace VecOps")
         del type(self).VecOps
         return ns
 
     # Overload RDF namespace
     @property
     def RDF(self):
-        ns = self._fallback_getattr('RDF')
+        ns = self._fallback_getattr("RDF")
         try:
             # Inject FromNumpy function
             from libROOTPythonizations import MakeNumpyDataFrame
+
             def DeprecatedMakeNumpy(*args, **kwargs):
                 import warnings
-                warnings.warn("MakeNumpyDataFrame is deprecated since v6.28 and will be removed in v6.30."\
-                              "Please use FromNumpy instead.", FutureWarning)
+
+                warnings.warn(
+                    "MakeNumpyDataFrame is deprecated since v6.28 and will be removed in v6.30."
+                    "Please use FromNumpy instead.",
+                    FutureWarning,
+                )
                 MakeNumpyDataFrame(*args, **kwargs)
+
             ns.MakeNumpyDataFrame = DeprecatedMakeNumpy
             ns.FromNumpy = MakeNumpyDataFrame
 
             if sys.version_info >= (3, 8):
                 try:
                     # Inject Experimental.Distributed package into namespace RDF if available
-                    ns.Experimental.Distributed = _create_rdf_experimental_distributed_module(ns.Experimental)
+                    ns.Experimental.Distributed = (
+                        _create_rdf_experimental_distributed_module(
+                            ns.Experimental
+                        )
+                    )
                 except ImportError:
                     pass
         except:
-            raise Exception('Failed to pythonize the namespace RDF')
+            raise Exception("Failed to pythonize the namespace RDF")
         del type(self).RDF
         return ns
 
@@ -350,29 +391,35 @@ class ROOTFacade(types.ModuleType):
     @property
     def RooFit(self):
         from ._pythonization._roofit import pythonize_roofit_namespace
-        ns = self._fallback_getattr('RooFit')
+
+        ns = self._fallback_getattr("RooFit")
         try:
             pythonize_roofit_namespace(ns)
         except:
-            raise Exception('Failed to pythonize the namespace RooFit')
+            raise Exception("Failed to pythonize the namespace RooFit")
         del type(self).RooFit
         return ns
 
     # Overload TMVA namespace
     @property
     def TMVA(self):
-        #this line is needed to import the pythonizations in _tmva directory
+        # this line is needed to import the pythonizations in _tmva directory
         from ._pythonization import _tmva
-        from ._pythonization._tmva import pythonize_tmva_namespace
-        ns = self._fallback_getattr('TMVA')
+
+        ns = self._fallback_getattr("TMVA")
         hasRDF = gSystem.GetFromPipe("root-config --has-dataframe") == "yes"
         if hasRDF:
             try:
-                pythonize_tmva_namespace(ns)
+                if sys.version_info >= (3, 8):
+                    from ._pythonization._tmva import inject_rbatchgenerator
+
+                    inject_rbatchgenerator(ns)
+
                 from libROOTPythonizations import AsRTensor
+
                 ns.Experimental.AsRTensor = AsRTensor
             except:
-                raise Exception('Failed to pythonize the namespace TMVA')
+                raise Exception("Failed to pythonize the namespace TMVA")
         del type(self).TMVA
         return ns
 
@@ -380,9 +427,13 @@ class ROOTFacade(types.ModuleType):
     @property
     def Numba(self):
         if sys.version_info[:3] <= _numba_pyversion:
-            raise Exception('ROOT.Numba requires Python above version {}.{}.{}'.format(*_numba_pyversion))
-        cppdef('namespace Numba {}')
-        ns = self._fallback_getattr('Numba')
+            raise Exception(
+                "ROOT.Numba requires Python above version {}.{}.{}".format(
+                    *_numba_pyversion
+                )
+            )
+        cppdef("namespace Numba {}")
+        ns = self._fallback_getattr("Numba")
         ns.Declare = staticmethod(_NumbaDeclareDecorator)
         del type(self).Numba
         return ns
@@ -390,7 +441,7 @@ class ROOTFacade(types.ModuleType):
     # Get TPyDispatcher for programming GUI callbacks
     @property
     def TPyDispatcher(self):
-        include('ROOT/TPyDispatcher.h')
+        include("ROOT/TPyDispatcher.h")
         tpd = gbl_namespace.TPyDispatcher
         type(self).TPyDispatcher = tpd
         return tpd

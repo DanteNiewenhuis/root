@@ -343,10 +343,13 @@ ColumnNames_t ROOT::Internal::RDF::GetBranchNames(TTree &t, bool allowDuplicates
 }
 
 RLoopManager::RLoopManager(TTree *tree, const ColumnNames_t &defaultBranches)
-   : fTree(std::shared_ptr<TTree>(tree, [](TTree *) {})), fDefaultColumns(defaultBranches),
+   : fTree(std::shared_ptr<TTree>(tree, [](TTree *) {})),
+     fDefaultColumns(defaultBranches),
      fNSlots(RDFInternal::GetNSlots()),
      fLoopType(ROOT::IsImplicitMTEnabled() ? ELoopType::kROOTFilesMT : ELoopType::kROOTFiles),
-     fNewSampleNotifier(fNSlots), fSampleInfos(fNSlots), fDatasetColumnReaders(fNSlots)
+     fNewSampleNotifier(fNSlots),
+     fSampleInfos(fNSlots),
+     fDatasetColumnReaders(fNSlots)
 {
 }
 
@@ -361,9 +364,13 @@ RLoopManager::RLoopManager(ULong64_t nEmptyEntries)
 }
 
 RLoopManager::RLoopManager(std::unique_ptr<RDataSource> ds, const ColumnNames_t &defaultBranches)
-   : fDefaultColumns(defaultBranches), fNSlots(RDFInternal::GetNSlots()),
+   : fDefaultColumns(defaultBranches),
+     fNSlots(RDFInternal::GetNSlots()),
      fLoopType(ROOT::IsImplicitMTEnabled() ? ELoopType::kDataSourceMT : ELoopType::kDataSource),
-     fDataSource(std::move(ds)), fNewSampleNotifier(fNSlots), fSampleInfos(fNSlots), fDatasetColumnReaders(fNSlots)
+     fDataSource(std::move(ds)),
+     fNewSampleNotifier(fNSlots),
+     fSampleInfos(fNSlots),
+     fDatasetColumnReaders(fNSlots)
 {
    fDataSource->SetNSlots(fNSlots);
 }
@@ -378,7 +385,7 @@ RLoopManager::RLoopManager(ROOT::RDF::Experimental::RDatasetSpec &&spec)
      fSampleInfos(fNSlots),
      fDatasetColumnReaders(fNSlots)
 {
-   auto chain = std::make_shared<TChain>("");
+   auto chain = ROOT::Internal::TreeUtils::MakeChainForMT();
    for (auto &sample : fSamples) {
       const auto &trees = sample.GetTreeNames();
       const auto &files = sample.GetFileNameGlobs();
@@ -540,7 +547,7 @@ void RLoopManager::RunTreeReader()
    try {
       while (r.Next() && fNStopsReceived < fNChildren) {
          if (fNewSampleNotifier.CheckFlag(0)) {
-            UpdateSampleInfo(/*slot*/0, r);
+            UpdateSampleInfo(/*slot*/ 0, r);
          }
          RunAndCheckFilters(0, r.GetCurrentEntry());
       }
@@ -665,7 +672,8 @@ void RLoopManager::InitNodeSlots(TTreeReader *r, unsigned int slot)
       callback(slot);
 }
 
-void RLoopManager::SetupSampleCallbacks(TTreeReader *r, unsigned int slot) {
+void RLoopManager::SetupSampleCallbacks(TTreeReader *r, unsigned int slot)
+{
    if (r != nullptr) {
       // we need to set a notifier so that we run the callbacks every time we switch to a new TTree
       // `PrependLink` inserts this notifier into the TTree/TChain's linked list of notifiers
@@ -679,12 +687,14 @@ void RLoopManager::SetupSampleCallbacks(TTreeReader *r, unsigned int slot) {
    fNewSampleNotifier.SetFlag(slot);
 }
 
-void RLoopManager::UpdateSampleInfo(unsigned int slot, const std::pair<ULong64_t, ULong64_t> &range) {
+void RLoopManager::UpdateSampleInfo(unsigned int slot, const std::pair<ULong64_t, ULong64_t> &range)
+{
    fSampleInfos[slot] = RSampleInfo(
       "Empty source, range: {" + std::to_string(range.first) + ", " + std::to_string(range.second) + "}", range);
 }
 
-void RLoopManager::UpdateSampleInfo(unsigned int slot, TTreeReader &r) {
+void RLoopManager::UpdateSampleInfo(unsigned int slot, TTreeReader &r)
+{
    // one GetTree to retrieve the TChain, another to retrieve the underlying TTree
    auto *tree = r.GetTree()->GetTree();
    R__ASSERT(tree != nullptr);

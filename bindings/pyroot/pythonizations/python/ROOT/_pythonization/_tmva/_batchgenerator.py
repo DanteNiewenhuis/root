@@ -220,12 +220,17 @@ class BaseGenerator:
     def StartValidation(self):
         self.generator.StartValidation()
 
+    # def __del__(self):
+    #     print(f"batchgenerator => Delete")
+    #     self.DeActivate()
+
+    @property
+    def is_active(self):
+        return self.generator.IsActive()
+
     def Activate(self):
         """Initialize the generator to be used for a loop"""
         self.generator.Activate()
-
-    def __del__(self):
-        self.DeActivate()
 
     def DeActivate(self):
         """Initialize the generator to be used for a loop"""
@@ -398,8 +403,24 @@ class BaseGenerator:
 
         if batch:
             return batch
-
         return None
+
+
+# Context that activates and deactivates the loading thread of the Cpp class
+# This ensures that the thread will always be deleted properly
+class LoadingThreadContext:
+    def __init__(self, base_generator: BaseGenerator):
+        print(f"LoadingThreadContext => init")
+        self.base_generator = base_generator
+
+    def __enter__(self):
+        print(f"LoadingThreadContext => enter")
+        self.base_generator.Activate()
+
+    def __exit__(self, type, value, traceback):
+        print(f"LoadingThreadContext => exit")
+        self.base_generator.DeActivate()
+        return True
 
 
 class TrainRBatchGenerator:
@@ -437,11 +458,11 @@ class TrainRBatchGenerator:
         return self.base_generator.train_columns
 
     @property
-    def target_column(self) -> list[str]:
+    def target_column(self) -> str:
         return self.base_generator.target_column
 
     @property
-    def weights_column(self) -> list[str]:
+    def weights_column(self) -> str:
         return self.base_generator.weights_column
 
     def __iter__(self):
@@ -463,17 +484,16 @@ class TrainRBatchGenerator:
         Yields:
             Union[np.NDArray, torch.Tensor]: A batch of data
         """
-        self.Activate()
 
-        while True:
-            batch = self.base_generator.GetTrainBatch()
+        with LoadingThreadContext(self.base_generator):
+            while True:
+                batch = self.base_generator.GetTrainBatch()
 
-            if not batch:
-                break
+                if not batch:
+                    break
 
-            yield self.conversion_function(batch)
+                yield self.conversion_function(batch)
 
-        self.base_generator.DeActivate()
         return None
 
 
@@ -504,11 +524,11 @@ class ValidationRBatchGenerator:
         return self.base_generator.train_columns
 
     @property
-    def target_column(self) -> list[str]:
+    def target_column(self) -> str:
         return self.base_generator.target_column
 
     @property
-    def weights_column(self) -> list[str]:
+    def weights_column(self) -> str:
         return self.base_generator.weights_column
 
     def __iter__(self):
@@ -530,6 +550,9 @@ class ValidationRBatchGenerator:
         Yields:
             Union[np.NDArray, torch.Tensor]: A batch of data
         """
+        if self.base_generator.is_active:
+            self.base_generator.DeActivate()
+
         self.base_generator.StartValidation()
 
         while True:
@@ -541,7 +564,7 @@ class ValidationRBatchGenerator:
             yield self.conversion_function(batch)
 
 
-def CreateBatchGenerators(
+def CreateNumPyGenerators(
     tree_name: str,
     file_name: str,
     batch_size: int,
@@ -702,29 +725,27 @@ def CreateTFDatasets(
         base_generator, base_generator.ConvertBatchToTF
     )
 
-    num_columns = len(train_generator.columns)
+    num_columns = len(train_generator.train_columns)
+
+    print(f"{num_columns = }")
 
     # No target and weights given
-    if target is None:
+    if target == "":
         batch_signature = tf.TensorSpec(
             shape=(batch_size, num_columns), dtype=tf.float32
         )
 
     # Target given, no weights given
-    elif weights is None:
+    elif weights == "":
         batch_signature = (
-            tf.TensorSpec(
-                shape=(batch_size, num_columns - 1), dtype=tf.float32
-            ),
+            tf.TensorSpec(shape=(batch_size, num_columns), dtype=tf.float32),
             tf.TensorSpec(shape=(batch_size,), dtype=tf.float32),
         )
 
     # Target and weights given
     else:
         batch_signature = (
-            tf.TensorSpec(
-                shape=(batch_size, num_columns - 2), dtype=tf.float32
-            ),
+            tf.TensorSpec(shape=(batch_size, num_columns), dtype=tf.float32),
             tf.TensorSpec(shape=(batch_size,), dtype=tf.float32),
             tf.TensorSpec(shape=(batch_size,), dtype=tf.float32),
         )

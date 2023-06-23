@@ -59,13 +59,18 @@ if(tmva)
     list(APPEND PYROOT_EXTRA_PY2_PY3_SOURCE
         ROOT/_pythonization/_tmva/_crossvalidation.py
         ROOT/_pythonization/_tmva/_dataloader.py
-        ROOT/_pythonization/_tmva/_batchgenerator.py
         ROOT/_pythonization/_tmva/_factory.py
         ROOT/_pythonization/_tmva/__init__.py
         ROOT/_pythonization/_tmva/_rbdt.py
         ROOT/_pythonization/_tmva/_rtensor.py
         ROOT/_pythonization/_tmva/_tree_inference.py
         ROOT/_pythonization/_tmva/_utils.py)
+
+
+    if(PYTHON_VERSION_STRING_Development_Main VERSION_GREATER_EQUAL 3.8 AND dataframe)
+        list(APPEND PYROOT_EXTRA_PY3_SOURCE
+             ROOT/_pythonization/_tmva/_batchgenerator.py)
+    endif()
 endif()
 
 list(APPEND PYROOT_EXTRA_HEADERS

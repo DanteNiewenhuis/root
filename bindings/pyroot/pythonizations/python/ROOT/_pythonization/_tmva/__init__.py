@@ -20,19 +20,29 @@ from .. import pythonization
 from ._factory import Factory
 from ._dataloader import DataLoader
 from ._crossvalidation import CrossValidation
-from ._batchgenerator import (
-    CreateBatchGenerators,
-    CreateTFDatasets,
-    CreatePyTorchGenerators,
-)
+
+if sys.version_info >= (3, 8):
+    from ._batchgenerator import (
+        CreateNumPyGenerators,
+        CreateTFDatasets,
+        CreatePyTorchGenerators,
+    )
+
+    python_batchgenerator_functions = [
+        CreateNumPyGenerators,
+        CreateTFDatasets,
+        CreatePyTorchGenerators,
+    ]
+
+    def inject_rbatchgenerator(ns):
+        for python_func in python_batchgenerator_functions:
+            func_name = python_func.__name__
+            setattr(ns.Experimental, func_name, python_func)
+
+        return ns
+
 
 from ._rbdt import Compute, pythonize_rbdt
-
-python_tmva_functions = [
-    CreateBatchGenerators,
-    CreateTFDatasets,
-    CreatePyTorchGenerators,
-]
 
 
 hasRDF = gSystem.GetFromPipe("root-config --has-dataframe") == "yes"
@@ -204,17 +214,3 @@ def pythonize_tmva(klass, name):
         rebind_attribute(klass, python_klass, func_name)
 
     return
-
-
-def pythonize_tmva_namespace(ns):
-    for python_func in python_tmva_functions:
-        func_name = python_func.__name__
-
-        if sys.version_info <= (3, 0):
-            # In Python 2 the RooFit is treated like a class and the global
-            # functions in the namespace must be static methods.
-            python_func = staticmethod(python_func)
-
-        setattr(ns.Experimental, func_name, python_func)
-
-    return ns

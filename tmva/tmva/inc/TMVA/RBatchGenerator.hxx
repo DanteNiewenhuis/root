@@ -14,6 +14,8 @@
 #include "TMVA/RBatchLoader.hxx"
 #include "TMVA/Tools.h"
 #include "TRandom3.h"
+#include "TROOT.h"
+#include "ROOT/RLogger.hxx"
 
 namespace TMVA {
 namespace Experimental {
@@ -56,7 +58,8 @@ private:
    // After, the chunk of data is split into batches of data.
    void LoadChunk(size_t current_chunk)
    {
-
+      auto verbosity = ROOT::Experimental::RLogScopedVerbosity(ROOT::Detail::RDF::RDFLogChannel(),
+                                                               ROOT::Experimental::ELogLevel::kInfo);
       const std::lock_guard<std::mutex> lock(fDataFrameLock);
       TMVA::Experimental::RChunkLoader<Args...> func((*fChunkTensor), fVecSizes, fVecPadding);
 
@@ -68,6 +71,9 @@ private:
             .AddSample({"", fTreeName, fFileName})
             .WithGlobalRange({start_l, std::numeric_limits<Long64_t>::max()});
       ROOT::RDataFrame x_rdf(x_spec);
+
+      for (auto *obj : *gROOT->GetListOfFiles())
+         std::cout << obj->GetName() << " " << obj->GetTitle() << std::endl;
 
       size_t processed_events, passed_events;
 
@@ -272,6 +278,7 @@ public:
    }
 
    void StartValidation() { fBatchLoader->StartValidation(); }
+   bool IsActive() { return fActivated; }
 };
 
 } // namespace Experimental
