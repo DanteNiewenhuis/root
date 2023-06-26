@@ -48,8 +48,6 @@ private:
    std::vector<size_t> fVecSizes;
    float fVecPadding;
 
-   std::mutex fDataFrameLock;
-
    ////////////////////////////////////////////////////////////////////////////////////////////////////////
    /// Functions
    ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -58,9 +56,6 @@ private:
    // After, the chunk of data is split into batches of data.
    void LoadChunk(size_t current_chunk)
    {
-      auto verbosity = ROOT::Experimental::RLogScopedVerbosity(ROOT::Detail::RDF::RDFLogChannel(),
-                                                               ROOT::Experimental::ELogLevel::kInfo);
-      const std::lock_guard<std::mutex> lock(fDataFrameLock);
       TMVA::Experimental::RChunkLoader<Args...> func((*fChunkTensor), fVecSizes, fVecPadding);
 
       // Create TDataFrame of the chunk
@@ -71,9 +66,6 @@ private:
             .AddSample({"", fTreeName, fFileName})
             .WithGlobalRange({start_l, std::numeric_limits<Long64_t>::max()});
       ROOT::RDataFrame x_rdf(x_spec);
-
-      for (auto *obj : *gROOT->GetListOfFiles())
-         std::cout << obj->GetName() << " " << obj->GetTitle() << std::endl;
 
       size_t processed_events, passed_events;
 
@@ -117,6 +109,11 @@ private:
 
       fCurrentRow += processed_events;
 
+      BatchChunk(current_chunk, processed_events);
+   }
+
+   void BatchChunk(size_t current_chunk, size_t processed_events)
+   {
       // Create batches for the current_chunk.
       // First get the correct idices to use, then turn them into batches
       // Validation batches only have to be made in the first epoch
