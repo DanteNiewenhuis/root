@@ -11,7 +11,12 @@ chunk_size = 1_000_000
 batch_size = 100_000
 
 ds_train, ds_validation = ROOT.TMVA.Experimental.CreateNumPyGenerators(
-    tree_name, file_name, batch_size, chunk_size, validation_split=0.3
+    tree_name,
+    file_name,
+    batch_size,
+    chunk_size,
+    validation_split=0.0,
+    suffle=False,
 )
 
 # Loop through training set

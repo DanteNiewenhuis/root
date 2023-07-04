@@ -201,8 +201,8 @@ class BaseGenerator:
         from ROOT import TMVA
 
         self.generator = TMVA.Experimental.RBatchGenerator(template)(
-            file_name,
             tree_name,
+            file_name,
             chunk_size,
             batch_size,
             self.given_columns,
@@ -215,14 +215,13 @@ class BaseGenerator:
             shuffle,
         )
 
-        self.deactivated = False
-
     def StartValidation(self):
         self.generator.StartValidation()
 
-    # def __del__(self):
-    #     print(f"batchgenerator => Delete")
-    #     self.DeActivate()
+    def __del__(self):
+        print(f"python::batchgenerator => Delete")
+        if self.is_active:
+            self.DeActivate()
 
     @property
     def is_active(self):
@@ -234,6 +233,8 @@ class BaseGenerator:
 
     def DeActivate(self):
         """Initialize the generator to be used for a loop"""
+
+        print(f"python::batchgenerator => DeActivate")
         self.generator.DeActivate()
 
     def GetSample(self):
